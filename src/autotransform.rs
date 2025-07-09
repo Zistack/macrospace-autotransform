@@ -5,7 +5,7 @@ use macrospace::pattern::{
 	Pattern,
 	TypedParameter,
 	UntypedParameter,
-	ParameterNotFound
+	SubstitutionError
 };
 use proc_macro2::TokenStream;
 use syn::{Token, parse2};
@@ -38,7 +38,7 @@ pub struct Autotransform
 	#[syn (bracketed)]
 	to_brackets: Bracket,
 	#[syn (in = to_brackets)]
-	to_type: Pattern <UntypedParameter>,
+	to_type: Pattern <TypedParameter <AutotransformBindingType>>,
 }
 
 impl Autotransform
@@ -50,32 +50,40 @@ impl Autotransform
 	}
 	*/
 
-	pub fn try_apply <F> (&self, ty_tokens: TokenStream, mut apply_inner: F)
+	pub fn try_apply <D, F> (&self, ty_tokens: TokenStream, mut apply_inner: F)
 	-> Result <(TokenStream, TokenStream), ApplicationError>
-	where F: FnMut (TokenStream) -> Result <(TokenStream, TokenStream), ApplicationError>
+	where
+		D: TransformDirection,
+		F: FnMut (TokenStream)
+			-> Result <(TokenStream, TokenStream), ApplicationError>
 	{
 		let mut autotransform_bindings: AutotransformBindings =
-			self . from_type . match_tokens (ty_tokens)?;
+			D::from_type (self) . match_tokens (ty_tokens)?;
 
 		let mut closure_bindings = ClosureBindings::new ();
 
 		for (transformable_ident, transformable_ty)
 		in autotransform_bindings . inner_types_mut ()
 		{
-			let (transformed_ty, transformed_closure) =
-				apply_inner (transformable_ty . to_token_stream ())?;
+			match apply_inner (transformable_ty . to_token_stream ())
+			{
+				Ok ((transformed_ty, transformed_closure)) =>
+				{
+					*transformable_ty = parse2 (transformed_ty)?;
 
-			*transformable_ty = parse2 (transformed_ty)?;
-
-			closure_bindings . insert
-			(
-				transformable_ident . clone (),
-				parse2 (transformed_closure)?
-			);
+					closure_bindings . insert
+					(
+						transformable_ident . clone (),
+						parse2 (transformed_closure)?
+					);
+				},
+				e @ Err (ApplicationError::Substitute (_)) => return e,
+				_ => continue
+			}
 		}
 
 		let transformed_ty =
-			self . to_type . substitute (autotransform_bindings)?;
+			D::to_type (self) . substitute (autotransform_bindings)?;
 
 		let transformed_closure = self
 			. transform_closure
@@ -87,11 +95,54 @@ impl Autotransform
 	}
 }
 
+pub trait TransformDirection
+{
+	fn from_type (autotransform: &Autotransform)
+	-> &Pattern <TypedParameter <AutotransformBindingType>>;
+
+	fn to_type (autotransform: &Autotransform)
+	-> &Pattern <TypedParameter <AutotransformBindingType>>;
+}
+
+pub struct Forward;
+
+impl TransformDirection for Forward
+{
+	fn from_type (autotransform: &Autotransform)
+	-> &Pattern <TypedParameter <AutotransformBindingType>>
+	{
+		&autotransform . from_type
+	}
+
+	fn to_type (autotransform: &Autotransform)
+	-> &Pattern <TypedParameter <AutotransformBindingType>>
+	{
+		&autotransform . to_type
+	}
+}
+
+pub struct Backward;
+
+impl TransformDirection for Backward
+{
+	fn from_type (autotransform: &Autotransform)
+	-> &Pattern <TypedParameter <AutotransformBindingType>>
+	{
+		&autotransform . to_type
+	}
+
+	fn to_type (autotransform: &Autotransform)
+	-> &Pattern <TypedParameter <AutotransformBindingType>>
+	{
+		&autotransform . from_type
+	}
+}
+
 #[derive (Clone, Debug)]
 pub enum ApplicationError
 {
 	Match (syn::parse::Error),
-	Substitute (ParameterNotFound <UntypedParameter>)
+	Substitute (SubstitutionError <AutotransformBindingType>)
 }
 
 impl From <syn::parse::Error> for ApplicationError
@@ -102,9 +153,9 @@ impl From <syn::parse::Error> for ApplicationError
 	}
 }
 
-impl From <ParameterNotFound <UntypedParameter>> for ApplicationError
+impl From <SubstitutionError <AutotransformBindingType>> for ApplicationError
 {
-	fn from (s: ParameterNotFound <UntypedParameter>) -> Self
+	fn from (s: SubstitutionError <AutotransformBindingType>) -> Self
 	{
 		Self::Substitute (s)
 	}

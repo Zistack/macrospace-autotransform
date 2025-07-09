@@ -9,7 +9,9 @@ use macrospace::pattern::{
 	TypedParameter,
 	UntypedParameter,
 	ParameterBindingMismatch,
-	ParameterNotFound
+	ParameterNotFound,
+	ParameterTypeMismatch,
+	SubstitutionError
 };
 use proc_macro2::TokenStream;
 use syn::{Lifetime, Type, Expr, Ident, Token};
@@ -74,6 +76,20 @@ impl CursorParse for AutotransformBindingType
 	}
 }
 
+impl Display for AutotransformBindingType
+{
+	fn fmt (&self, f: &mut Formatter <'_>) -> Result <(), std::fmt::Error>
+	{
+		match self
+		{
+			Self::Type (_) => f . write_str ("type"),
+			Self::Lifetime (_) => f . write_str ("lifetime"),
+			Self::Const (_) => f . write_str ("const"),
+			Self::InnerType (_) => f . write_str ("inner_type")
+		}
+	}
+}
+
 #[derive (Clone, Debug, ToTokens, PartialEq, Eq)]
 pub enum AutotransformBindingValue
 {
@@ -81,6 +97,24 @@ pub enum AutotransformBindingValue
 	Lifetime (Lifetime),
 	Const (Expr),
 	InnerType (Type)
+}
+
+impl AutotransformBindingValue
+{
+	fn get_type (&self) -> AutotransformBindingType
+	{
+		match self
+		{
+			Self::Type (_) =>
+				AutotransformBindingType::Type (Default::default ()),
+			Self::Lifetime (_) =>
+				AutotransformBindingType::Lifetime (Default::default ()),
+			Self::Const (_) =>
+				AutotransformBindingType::Const (Default::default ()),
+			Self::InnerType (_) =>
+				AutotransformBindingType::InnerType (Default::default ())
+		}
+	}
 }
 
 impl Display for AutotransformBindingValue
@@ -191,6 +225,44 @@ impl MergeableBindings for AutotransformBindings
 		}
 
 		Ok (())
+	}
+}
+
+impl SubstitutionBindings <TypedParameter <AutotransformBindingType>>
+for AutotransformBindings
+{
+	type Error = SubstitutionError <AutotransformBindingType>;
+
+	fn write_parameter_tokens
+	(
+		&self,
+		parameter: TypedParameter <AutotransformBindingType>,
+		tokens: &mut TokenStream
+	)
+	-> Result <(), Self::Error>
+	{
+		match self . map . get (&parameter . ident)
+		{
+			Some (value) =>
+			{
+				let value_type = value . get_type ();
+
+				if value_type == parameter . ty
+				{
+					value . to_tokens (tokens);
+					Ok (())
+				}
+				else
+				{
+					Err
+					(
+						ParameterTypeMismatch::new (value_type, parameter)
+							. into ()
+					)
+				}
+			},
+			None => Err (ParameterNotFound::new (parameter) . into ())
+		}
 	}
 }
 
