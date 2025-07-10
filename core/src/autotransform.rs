@@ -8,7 +8,7 @@ use macrospace::pattern::{
 	SubstitutionError
 };
 use proc_macro2::TokenStream;
-use syn::{Token, parse2};
+use syn::{Visibility, Ident, Token, parse2};
 use syn::token::{Brace, Bracket};
 use syn_derive::{Parse, ToTokens};
 use quote::ToTokens;
@@ -19,26 +19,34 @@ use crate::autotransform_bindings::{
 };
 use crate::closure_bindings::ClosureBindings;
 
+mod kw
+{
+	syn::custom_keyword! (autotransform);
+}
+
 #[derive (Clone, Debug, Parse, ToTokens)]
 pub struct Autotransform
 {
-	#[syn (braced)]
-	transform_braces: Brace,
-	#[syn (in = transform_braces)]
-	transform_closure: Pattern <UntypedParameter>,
-	colon_token: Token! [:],
+	pub vis: Visibility,
+	pub autotransform_token: kw::autotransform,
+	pub ident: Ident,
 
 	#[syn (bracketed)]
-	from_brackets: Bracket,
+	pub from_brackets: Bracket,
 	#[syn (in = from_brackets)]
-	from_type: Pattern <TypedParameter <AutotransformBindingType>>,
+	pub from_type: Pattern <TypedParameter <AutotransformBindingType>>,
 
-	arrow_token: Token! [->],
+	pub arrow_token: Token! [->],
 
 	#[syn (bracketed)]
-	to_brackets: Bracket,
+	pub to_brackets: Bracket,
 	#[syn (in = to_brackets)]
-	to_type: Pattern <TypedParameter <AutotransformBindingType>>,
+	pub to_type: Pattern <TypedParameter <AutotransformBindingType>>,
+
+	#[syn (braced)]
+	pub transform_braces: Brace,
+	#[syn (in = transform_braces)]
+	pub transform_closure: Pattern <UntypedParameter>,
 }
 
 impl Autotransform

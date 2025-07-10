@@ -4,9 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-macrospace = {path = "../macrospace"}
+macrospace-autotransform-core = {path = "core"}
+macrospace-autotransform-macros = {path = "macros"}
 
-proc-macro2 = {version = "1.0"}
-syn = {version = "2.0"}
-quote = {version = "1.0"}
-syn_derive = {version = "0.2"}
+#macrospace = {path = "../macrospace"}
+
+#proc-macro2 = {version = "1.0"}
+#syn = {version = "2.0"}
+#quote = {version = "1.0"}
+#syn_derive = {version = "0.2"}
