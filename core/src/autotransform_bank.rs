@@ -1,5 +1,8 @@
 use proc_macro2::TokenStream;
 
+use syn::parse::{Parse, ParseStream};
+use quote::ToTokens;
+
 use crate::{Autotransform, TransformDirection, Forward, Backward, ApplicationError};
 
 #[derive (Clone, Debug)]
@@ -52,5 +55,31 @@ impl AutotransformBank
 	-> Result <(TokenStream, TokenStream), ApplicationError>
 	{
 		self . try_apply::<Backward> (ty_tokens)
+	}
+}
+
+impl Parse for AutotransformBank
+{
+	fn parse (input: ParseStream <'_>) -> syn::Result <Self>
+	{
+		let mut transforms = Vec::new ();
+
+		while let Some (autotransform) = Autotransform::try_parse (input)?
+		{
+			transforms . push (autotransform);
+		}
+
+		Ok (Self {transforms})
+	}
+}
+
+impl ToTokens for AutotransformBank
+{
+	fn to_tokens (&self, tokens: &mut TokenStream)
+	{
+		for transform in &self . transforms
+		{
+			transform . to_tokens (tokens)
+		}
 	}
 }

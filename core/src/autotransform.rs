@@ -9,6 +9,7 @@ use macrospace::pattern::{
 };
 use proc_macro2::TokenStream;
 use syn::{Visibility, Ident, Token, parse2};
+use syn::parse::ParseStream;
 use syn::token::{Brace, Bracket};
 use syn_derive::{Parse, ToTokens};
 use quote::ToTokens;
@@ -57,6 +58,22 @@ impl Autotransform
 		// We might need a new visitor for this one.
 	}
 	*/
+
+	pub fn try_parse (input: ParseStream) -> syn::Result <Option <Self>>
+	{
+		let speculative = input . fork ();
+
+		if speculative . parse::<Visibility> () . is_err ()
+		{
+			return Ok (None);
+		}
+		if speculative . parse::<kw::autotransform> () . is_err ()
+		{
+			return Ok (None);
+		}
+
+		Ok (Some (input . parse ()?))
+	}
 
 	pub fn try_apply <D, F> (&self, ty_tokens: TokenStream, mut apply_inner: F)
 	-> Result <(TokenStream, TokenStream), ApplicationError>
