@@ -22,6 +22,7 @@ use quote::ToTokens;
 
 mod kw
 {
+	syn::custom_keyword! (opt_lifetime);
 	syn::custom_keyword! (lifetime);
 	syn::custom_keyword! (inner_type);
 }
@@ -29,6 +30,8 @@ mod kw
 #[derive (Copy, Clone, Debug, PartialEq, Eq, Parse, ToTokens)]
 pub enum AutotransformBindingType
 {
+	#[parse (peek = kw::opt_lifetime)]
+	OptionalLifetime (kw::opt_lifetime),
 	#[parse (peek = Token! [type])]
 	Type (Token! [type]),
 	#[parse (peek = kw::lifetime)]
@@ -48,6 +51,10 @@ impl CursorParse for AutotransformBindingType
 			let autotransform_binding_type = match
 				type_ident . to_string () . as_str ()
 			{
+				"opt_lifetime" => AutotransformBindingType::OptionalLifetime
+				(
+					kw::opt_lifetime {span: type_ident . span ()}
+				),
 				"type" => AutotransformBindingType::Type
 				(
 					syn::token::Type {span: type_ident . span ()}
@@ -82,6 +89,7 @@ impl Display for AutotransformBindingType
 	{
 		match self
 		{
+			Self::OptionalLifetime (_) => f . write_str ("opt_lifetime"),
 			Self::Type (_) => f . write_str ("type"),
 			Self::Lifetime (_) => f . write_str ("lifetime"),
 			Self::Const (_) => f . write_str ("const"),
@@ -93,6 +101,7 @@ impl Display for AutotransformBindingType
 #[derive (Clone, Debug, ToTokens, PartialEq, Eq)]
 pub enum AutotransformBindingValue
 {
+	OptionalLifetime (Option <Lifetime>),
 	Type (Type),
 	Lifetime (Lifetime),
 	Const (Expr),
@@ -105,6 +114,8 @@ impl AutotransformBindingValue
 	{
 		match self
 		{
+			Self::OptionalLifetime (_) =>
+				AutotransformBindingType::OptionalLifetime (Default::default ()),
 			Self::Type (_) =>
 				AutotransformBindingType::Type (Default::default ()),
 			Self::Lifetime (_) =>
@@ -179,6 +190,8 @@ for AutotransformBindings
 	{
 		let value = match parameter . ty
 		{
+			AutotransformBindingType::OptionalLifetime (_) =>
+				AutotransformBindingValue::OptionalLifetime (input . parse ()?),
 			AutotransformBindingType::Type (_) =>
 				AutotransformBindingValue::Type (input . parse ()?),
 			AutotransformBindingType::Lifetime (_) =>
