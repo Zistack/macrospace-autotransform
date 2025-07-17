@@ -14,11 +14,11 @@ use syn::token::{Brace, Bracket};
 use syn_derive::{Parse, ToTokens};
 use quote::ToTokens;
 
-use crate::autotransform_bindings::{
+use crate::bindings::{
 	AutotransformBindings,
-	AutotransformBindingType
+	AutotransformBindingType,
+	ClosureBindings
 };
-use crate::closure_bindings::ClosureBindings;
 
 mod kw
 {

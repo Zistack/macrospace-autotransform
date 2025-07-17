@@ -1,9 +1,9 @@
 use proc_macro2::TokenStream;
 
-use syn::{Lifetime, Type, Token, parse2};
+use syn::{Lifetime, Token};
 use syn::parse::{Parse, ParseStream};
 use syn_derive::{Parse, ToTokens};
-use quote::{ToTokens, quote};
+use quote::ToTokens;
 
 use crate::{
 	Autotransform,
@@ -12,6 +12,8 @@ use crate::{
 	Backward,
 	ApplicationError
 };
+
+use crate::translation::GetTranslation;
 
 #[derive (Clone, Debug, Parse, ToTokens)]
 struct OwnedSelf
@@ -88,39 +90,23 @@ impl AutotransformBank
 		self . try_apply::<Backward> (ty_tokens)
 	}
 
-	pub fn try_apply_with_receiver <D>
+	pub fn try_apply_with_translator <D, T>
 	(
 		&self,
 		ty_tokens: TokenStream,
-		receiver_ty: &Type
+		translator: T
 	)
 	-> Result <(TokenStream, TokenStream), ApplicationError>
-	where D: TransformDirection
+	where
+		D: TransformDirection,
+		T: Copy + GetTranslation
 	{
-		let mut preprocessed_ty_tokens = ty_tokens . clone ();
-
-		if let Ok (OwnedSelf {..}) = parse2 (ty_tokens . clone ())
+		let preprocessed_ty_tokens =
+			match translator . get_translation (ty_tokens . clone ())
 		{
-			preprocessed_ty_tokens = receiver_ty . to_token_stream ();
-		}
-
-		if let Ok (RefSelf {ampersand_token, lifetime, ..}) =
-			parse2 (ty_tokens . clone ())
-		{
-			preprocessed_ty_tokens = quote!
-			(
-				#ampersand_token #lifetime #receiver_ty
-			);
-		}
-
-		if let Ok (RefMutSelf {ampersand_token, lifetime, mut_token, ..}) =
-			parse2 (ty_tokens . clone ())
-		{
-			preprocessed_ty_tokens = quote!
-			(
-				#ampersand_token #lifetime #mut_token #receiver_ty
-			);
-		}
+			Some (translated_ty) => translated_ty . to_token_stream (),
+			None => ty_tokens . clone ()
+		};
 
 		for transform in &self . transforms
 		{
@@ -128,7 +114,7 @@ impl AutotransformBank
 			(
 				preprocessed_ty_tokens . clone (),
 				|ty_tokens|
-				self . try_apply_with_receiver::<D> (ty_tokens, receiver_ty)
+				self . try_apply_with_translator::<D, T> (ty_tokens, translator)
 			)
 			{
 				Ok ((transformed_ty, transformed_closure)) =>
@@ -151,26 +137,28 @@ impl AutotransformBank
 		)
 	}
 
-	pub fn try_apply_forward_with_receiver
+	pub fn try_apply_forward_with_translator <T>
 	(
 		&self,
 		ty_tokens: TokenStream,
-		receiver_ty: &Type
+		translator: T
 	)
 	-> Result <(TokenStream, TokenStream), ApplicationError>
+	where T: Copy + GetTranslation
 	{
-		self . try_apply_with_receiver::<Forward> (ty_tokens, receiver_ty)
+		self . try_apply_with_translator::<Forward, T> (ty_tokens, translator)
 	}
 
-	pub fn try_apply_backward_with_receiver
+	pub fn try_apply_backward_with_translator <T>
 	(
 		&self,
 		ty_tokens: TokenStream,
-		receiver_ty: &Type
+		translator: T
 	)
 	-> Result <(TokenStream, TokenStream), ApplicationError>
+	where T: Copy + GetTranslation
 	{
-		self . try_apply_with_receiver::<Backward> (ty_tokens, receiver_ty)
+		self . try_apply_with_translator::<Backward, T> (ty_tokens, translator)
 	}
 }
 
