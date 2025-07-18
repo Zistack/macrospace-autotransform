@@ -76,23 +76,27 @@ impl Autotransform
 	}
 
 	pub fn try_apply <D, F> (&self, ty_tokens: TokenStream, mut apply_inner: F)
-	-> Result <(TokenStream, TokenStream), ApplicationError>
+	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
 	where
 		D: TransformDirection,
 		F: FnMut (TokenStream)
-			-> Result <(TokenStream, TokenStream), ApplicationError>
+			-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
 	{
 		let mut autotransform_bindings: AutotransformBindings =
-			D::from_type (self) . match_tokens (ty_tokens)?;
+			match D::from_type (self) . match_tokens (ty_tokens)
+			{
+				Ok (bindings) => bindings,
+				Err (_)=> return Ok (None)
+			};
 
 		let mut closure_bindings = ClosureBindings::new ();
 
 		for (transformable_ident, transformable_ty)
 		in autotransform_bindings . inner_types_mut ()
 		{
-			match apply_inner (transformable_ty . to_token_stream ())
+			match apply_inner (transformable_ty . to_token_stream ())?
 			{
-				Ok ((transformed_ty, transformed_closure)) =>
+				Some ((transformed_ty, transformed_closure)) =>
 				{
 					*transformable_ty = parse2 (transformed_ty)?;
 
@@ -102,8 +106,7 @@ impl Autotransform
 						parse2 (transformed_closure)?
 					);
 				},
-				e @ Err (ApplicationError::Substitute (_)) => return e,
-				_ => continue
+				None => continue
 			}
 		}
 
@@ -116,7 +119,7 @@ impl Autotransform
 			// This process is infallible.
 			. unwrap ();
 
-		Ok ((transformed_ty, transformed_closure))
+		Ok (Some ((transformed_ty, transformed_closure)))
 	}
 }
 
@@ -166,7 +169,7 @@ impl TransformDirection for Backward
 #[derive (Clone, Debug)]
 pub enum ApplicationError
 {
-	Match (syn::parse::Error),
+	Transform (syn::parse::Error),
 	Substitute (SubstitutionError <AutotransformBindingType>)
 }
 
@@ -174,7 +177,7 @@ impl From <syn::parse::Error> for ApplicationError
 {
 	fn from (m: syn::parse::Error) -> Self
 	{
-		Self::Match (m)
+		Self::Transform (m)
 	}
 }
 
@@ -192,7 +195,7 @@ impl Display for ApplicationError
 	{
 		match self
 		{
-			Self::Match (m) => Display::fmt (m, f),
+			Self::Transform (m) => Display::fmt (m, f),
 			Self::Substitute (s) => Display::fmt (s, f)
 		}
 	}
@@ -208,7 +211,7 @@ impl Into <syn::parse::Error> for ApplicationError
 	{
 		match self
 		{
-			Self::Match (m) => m,
+			Self::Transform (m) => m,
 			Self::Substitute (s) => s . into ()
 		}
 	}

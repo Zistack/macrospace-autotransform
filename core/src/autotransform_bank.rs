@@ -47,7 +47,7 @@ pub struct AutotransformBank
 impl AutotransformBank
 {
 	pub fn try_apply <D> (&self, ty_tokens: TokenStream)
-	-> Result <(TokenStream, TokenStream), ApplicationError>
+	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
 	where D: TransformDirection
 	{
 		for transform in &self . transforms
@@ -56,36 +56,25 @@ impl AutotransformBank
 			(
 				ty_tokens . clone (),
 				|ty_tokens| self . try_apply::<D> (ty_tokens)
-			)
+			)?
 			{
-				Ok ((transformed_ty, transformed_closure)) =>
-					return Ok ((transformed_ty, transformed_closure)),
-				e @ Err (ApplicationError::Substitute (_)) => return e,
-				_ => continue
+				Some ((transformed_ty, transformed_closure)) =>
+					return Ok (Some ((transformed_ty, transformed_closure))),
+				None => continue
 			}
 		}
 
-		Err
-		(
-			ApplicationError::Match
-			(
-				syn::parse::Error::new_spanned
-				(
-					ty_tokens,
-					"type does not match any autotransform pattern"
-				)
-			)
-		)
+		Ok (None)
 	}
 
 	pub fn try_apply_forward (&self, ty_tokens: TokenStream)
-	-> Result <(TokenStream, TokenStream), ApplicationError>
+	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
 	{
 		self . try_apply::<Forward> (ty_tokens)
 	}
 
 	pub fn try_apply_backward (&self, ty_tokens: TokenStream)
-	-> Result <(TokenStream, TokenStream), ApplicationError>
+	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
 	{
 		self . try_apply::<Backward> (ty_tokens)
 	}
@@ -96,7 +85,7 @@ impl AutotransformBank
 		ty_tokens: TokenStream,
 		translator: T
 	)
-	-> Result <(TokenStream, TokenStream), ApplicationError>
+	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
 	where
 		D: TransformDirection,
 		T: Copy + GetTranslation
@@ -115,26 +104,15 @@ impl AutotransformBank
 				preprocessed_ty_tokens . clone (),
 				|ty_tokens|
 				self . try_apply_with_translator::<D, T> (ty_tokens, translator)
-			)
+			)?
 			{
-				Ok ((transformed_ty, transformed_closure)) =>
-					return Ok ((transformed_ty, transformed_closure)),
-				e @ Err (ApplicationError::Substitute (_)) => return e,
-				_ => continue
+				Some ((transformed_ty, transformed_closure)) =>
+					return Ok (Some ((transformed_ty, transformed_closure))),
+				None => continue
 			}
 		}
 
-		Err
-		(
-			ApplicationError::Match
-			(
-				syn::parse::Error::new_spanned
-				(
-					ty_tokens,
-					"type does not match any autotransform pattern"
-				)
-			)
-		)
+		Ok (None)
 	}
 
 	pub fn try_apply_forward_with_translator <T>
@@ -143,7 +121,7 @@ impl AutotransformBank
 		ty_tokens: TokenStream,
 		translator: T
 	)
-	-> Result <(TokenStream, TokenStream), ApplicationError>
+	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
 	where T: Copy + GetTranslation
 	{
 		self . try_apply_with_translator::<Forward, T> (ty_tokens, translator)
@@ -155,7 +133,7 @@ impl AutotransformBank
 		ty_tokens: TokenStream,
 		translator: T
 	)
-	-> Result <(TokenStream, TokenStream), ApplicationError>
+	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
 	where T: Copy + GetTranslation
 	{
 		self . try_apply_with_translator::<Backward, T> (ty_tokens, translator)
