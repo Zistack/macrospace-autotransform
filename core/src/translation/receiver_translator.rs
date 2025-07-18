@@ -11,8 +11,8 @@ use super::get_translation::GetTranslation;
 #[derive (Clone, Debug)]
 pub struct ReceiverTypes
 {
-	receiver_type: Type,
-	delegated_receiver_type: Type
+	pub receiver_type: Type,
+	pub delegated_receiver_type: Type
 }
 
 impl ReceiverTypes
