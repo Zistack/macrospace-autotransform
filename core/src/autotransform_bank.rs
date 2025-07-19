@@ -13,8 +13,6 @@ use crate::{
 	ApplicationError
 };
 
-use crate::translation::GetTranslation;
-
 #[derive (Clone, Debug, Parse, ToTokens)]
 struct OwnedSelf
 {
@@ -77,66 +75,6 @@ impl AutotransformBank
 	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
 	{
 		self . try_apply::<Backward> (ty_tokens)
-	}
-
-	pub fn try_apply_with_translator <D, T>
-	(
-		&self,
-		ty_tokens: TokenStream,
-		translator: T
-	)
-	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
-	where
-		D: TransformDirection,
-		T: Copy + GetTranslation
-	{
-		let preprocessed_ty_tokens =
-			match translator . get_translation (ty_tokens . clone ())
-		{
-			Some (translated_ty) => translated_ty . to_token_stream (),
-			None => ty_tokens . clone ()
-		};
-
-		for transform in &self . transforms
-		{
-			match transform . try_apply::<D, _>
-			(
-				preprocessed_ty_tokens . clone (),
-				|ty_tokens|
-				self . try_apply_with_translator::<D, T> (ty_tokens, translator)
-			)?
-			{
-				Some ((transformed_ty, transformed_closure)) =>
-					return Ok (Some ((transformed_ty, transformed_closure))),
-				None => continue
-			}
-		}
-
-		Ok (None)
-	}
-
-	pub fn try_apply_forward_with_translator <T>
-	(
-		&self,
-		ty_tokens: TokenStream,
-		translator: T
-	)
-	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
-	where T: Copy + GetTranslation
-	{
-		self . try_apply_with_translator::<Forward, T> (ty_tokens, translator)
-	}
-
-	pub fn try_apply_backward_with_translator <T>
-	(
-		&self,
-		ty_tokens: TokenStream,
-		translator: T
-	)
-	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
-	where T: Copy + GetTranslation
-	{
-		self . try_apply_with_translator::<Backward, T> (ty_tokens, translator)
 	}
 }
 

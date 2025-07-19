@@ -2,22 +2,19 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use macrospace::substitute::Substitutions;
-use proc_macro2::TokenStream;
 use syn::{
 	Ident,
 	Type,
 	Generics,
 	AngleBracketedGenericArguments,
-	Token,
-	parse_quote
+	Token
 };
 use syn::fold::Fold;
 use syn::parse::{Parser, ParseStream, Result};
 use syn_derive::{Parse, ToTokens};
+use quote::ToTokens;
 
-use super::ref_status::RefStatus;
 use super::util::{TranslationTarget, Base, Delegated};
-use super::get_translation::GetTranslation;
 
 fn parse_generic_arguments (input: ParseStream <'_>)
 -> Result <Option <AngleBracketedGenericArguments>>
@@ -94,13 +91,13 @@ impl AssociatedTypes
 }
 
 #[derive (Debug)]
-pub struct AssociatedTranslator <'a, D>
+pub struct AssociatedTranslator <'a, T>
 {
 	associated_types: &'a AssociatedTypes,
-	_d: PhantomData <D>
+	_d: PhantomData <T>
 }
 
-impl <'a, D> AssociatedTranslator <'a, D>
+impl <'a, T> AssociatedTranslator <'a, T>
 {
 	fn new (associated_types: &'a AssociatedTypes) -> Self
 	{
@@ -108,11 +105,11 @@ impl <'a, D> AssociatedTranslator <'a, D>
 	}
 }
 
-impl <'a, D> Copy for AssociatedTranslator <'a, D>
+impl <'a, T> Copy for AssociatedTranslator <'a, T>
 {
 }
 
-impl <'a, D> Clone for AssociatedTranslator <'a, D>
+impl <'a, T> Clone for AssociatedTranslator <'a, T>
 {
 	fn clone (&self) -> Self
 	{
@@ -120,15 +117,13 @@ impl <'a, D> Clone for AssociatedTranslator <'a, D>
 	}
 }
 
-impl <'a, D> GetTranslation for AssociatedTranslator <'a, D>
-where D: TranslationTarget
+impl <'a, T> Fold for AssociatedTranslator <'a, T>
+where T: TranslationTarget
 {
-	fn get_translation (self, ty_tokens: TokenStream) -> Option <Type>
+	fn fold_type (&mut self, ty: Type) -> Type
 	{
 		let parser = |input: ParseStream <'_>|
 		{
-			let ref_status: RefStatus = input . parse ()?;
-
 			let (generics, ty_arguments, translated_ty) = if input . peek (Token! [Self])
 			{
 				let simple_assoc_type: SimpleAssocType = input . parse ()?;
@@ -142,7 +137,7 @@ where D: TranslationTarget
 					(
 						generics,
 						simple_assoc_type . generic_arguments,
-						D::select (ty, delegated_ty)
+						T::select (ty, delegated_ty)
 					),
 					None => return Ok (None)
 				}
@@ -163,7 +158,7 @@ where D: TranslationTarget
 						(
 							generics,
 							qualified_assoc_type . generic_arguments,
-							D::select (ty, delegated_ty)
+							T::select (ty, delegated_ty)
 						),
 						None => return Ok (None)
 					}
@@ -188,17 +183,18 @@ where D: TranslationTarget
 						&ty_arguments . args
 					)?;
 
-					let translated_ty = substitutions
-						. fold_type (translated_ty . clone ());
-
-					parse_quote! (#ref_status #translated_ty)
+					substitutions . fold_type (translated_ty . clone ())
 				},
-				None => parse_quote! (#ref_status #translated_ty)
+				None => translated_ty . clone ()
 			};
 
 			Ok (Some (translated_ty))
 		};
 
-		parser . parse2 (ty_tokens) . unwrap_or (None)
+		match parser . parse2 (ty . to_token_stream ())
+		{
+			Ok (Some (translated_ty)) => translated_ty,
+			_ => ty
+		}
 	}
 }

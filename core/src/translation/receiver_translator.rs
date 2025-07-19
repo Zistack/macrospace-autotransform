@@ -1,12 +1,11 @@
 use std::marker::PhantomData;
 
-use proc_macro2::TokenStream;
-use syn::{Type, Token, parse_quote};
+use syn::{Type, Token};
+use syn::fold::Fold;
 use syn::parse::{Parser, ParseStream};
+use quote::ToTokens;
 
-use super::ref_status::RefStatus;
 use super::util::{TranslationTarget, Base, Delegated};
-use super::get_translation::GetTranslation;
 
 #[derive (Clone, Debug)]
 pub struct ReceiverTypes
@@ -34,13 +33,13 @@ impl ReceiverTypes
 }
 
 #[derive (Debug)]
-pub struct ReceiverTranslator <'a, D>
+pub struct ReceiverTranslator <'a, T>
 {
 	receiver_types: &'a ReceiverTypes,
-	_d: PhantomData <D>
+	_d: PhantomData <T>
 }
 
-impl <'a, D> ReceiverTranslator <'a, D>
+impl <'a, T> ReceiverTranslator <'a, T>
 {
 	fn new (receiver_types: &'a ReceiverTypes) -> Self
 	{
@@ -48,11 +47,11 @@ impl <'a, D> ReceiverTranslator <'a, D>
 	}
 }
 
-impl <'a, D> Copy for ReceiverTranslator <'a, D>
+impl <'a, T> Copy for ReceiverTranslator <'a, T>
 {
 }
 
-impl <'a, D> Clone for ReceiverTranslator <'a, D>
+impl <'a, T> Clone for ReceiverTranslator <'a, T>
 {
 	fn clone (&self) -> Self
 	{
@@ -60,26 +59,24 @@ impl <'a, D> Clone for ReceiverTranslator <'a, D>
 	}
 }
 
-impl <'a, D> GetTranslation for ReceiverTranslator <'a, D>
-where D: TranslationTarget
+impl <'a, T> Fold for ReceiverTranslator <'a, T>
+where T: TranslationTarget
 {
-	fn get_translation (self, ty_tokens: TokenStream) -> Option <Type>
+	fn fold_type (&mut self, ty: Type) -> Type
 	{
 		let parser = |input: ParseStream <'_>|
 		{
-			let ref_status: RefStatus = input . parse ()?;
-
 			let _self_token: Token! [Self] = input . parse ()?;
 
-			let translated_type = D::select
+			let translated_ty = T::select
 			(
 				&self . receiver_types . receiver_type,
 				&self . receiver_types . delegated_receiver_type
 			);
 
-			Ok (parse_quote! (#ref_status #translated_type))
+			Ok (translated_ty . clone ())
 		};
 
-		parser . parse2 (ty_tokens) . ok ()
+		parser . parse2 (ty . to_token_stream ()) . unwrap_or (ty)
 	}
 }
