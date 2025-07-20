@@ -4,11 +4,11 @@ use std::fmt::{Display, Formatter};
 use macrospace::pattern::{
 	Pattern,
 	TypedParameter,
-	UntypedParameter,
-	SubstitutionError
+	SubstitutionError,
+	ParameterBindingMismatch
 };
 use proc_macro2::TokenStream;
-use syn::{Visibility, Ident, Token, parse2};
+use syn::{Visibility, Ident, Expr, Token, parse2};
 use syn::parse::ParseStream;
 use syn::token::{Brace, Bracket};
 use syn_derive::{Parse, ToTokens};
@@ -17,7 +17,9 @@ use quote::ToTokens;
 use crate::bindings::{
 	AutotransformBindings,
 	AutotransformBindingType,
-	ClosureBindings
+	ExprParameter,
+	ExprBindings,
+	ExprParameters
 };
 
 mod kw
@@ -47,7 +49,7 @@ pub struct Autotransform
 	#[syn (braced)]
 	pub transform_braces: Brace,
 	#[syn (in = transform_braces)]
-	pub transform_closure: Pattern <UntypedParameter>,
+	pub transform_expr: Pattern <ExprParameter>,
 }
 
 impl Autotransform
@@ -75,36 +77,53 @@ impl Autotransform
 		Ok (Some (input . parse ()?))
 	}
 
-	pub fn try_apply <D, F> (&self, ty_tokens: TokenStream, mut apply_inner: F)
+	pub fn try_apply <D, F>
+	(
+		&self,
+		ty_tokens: TokenStream,
+		arg_expr: Expr,
+		mut apply_inner: F
+	)
 	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
 	where
 		D: TransformDirection,
-		F: FnMut (TokenStream)
-			-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
+		F: FnMut (TokenStream, Option <&Expr>)
+			-> Result <Option <(TokenStream, Option <TokenStream>)>, ApplicationError>
 	{
 		let mut autotransform_bindings: AutotransformBindings =
 			match D::from_type (self) . match_tokens (ty_tokens)
-			{
-				Ok (bindings) => bindings,
-				Err (_)=> return Ok (None)
-			};
+		{
+			Ok (bindings) => bindings,
+			Err (_) => return Ok (None)
+		};
 
-		let mut closure_bindings = ClosureBindings::new ();
+		let expr_parameters: ExprParameters = self
+			. transform_expr
+			. collect_parameters ()?;
+
+		let mut expr_bindings = ExprBindings::new (arg_expr);
 
 		for (transformable_ident, transformable_ty)
 		in autotransform_bindings . inner_types_mut ()
 		{
-			match apply_inner (transformable_ty . to_token_stream ())?
+			match apply_inner
+			(
+				transformable_ty . to_token_stream (),
+				expr_parameters . get_arg_expr (transformable_ident)
+			)?
 			{
-				Some ((transformed_ty, transformed_closure)) =>
+				Some ((transformed_ty, maybe_transformed_expr)) =>
 				{
 					*transformable_ty = parse2 (transformed_ty)?;
 
-					closure_bindings . insert
-					(
-						transformable_ident . clone (),
-						parse2 (transformed_closure)?
-					);
+					if let Some (transformed_expr) = maybe_transformed_expr
+					{
+						expr_bindings . add_subvalue
+						(
+							transformable_ident . clone (),
+							parse2 (transformed_expr)?
+						);
+					}
 				},
 				None => continue
 			}
@@ -113,13 +132,51 @@ impl Autotransform
 		let transformed_ty =
 			D::to_type (self) . substitute (autotransform_bindings)?;
 
-		let transformed_closure = self
-			. transform_closure
-			. substitute (closure_bindings)
+		let transformed_expr = self
+			. transform_expr
+			. substitute (expr_bindings)
 			// This process is infallible.
 			. unwrap ();
 
-		Ok (Some ((transformed_ty, transformed_closure)))
+		Ok (Some ((transformed_ty, transformed_expr)))
+	}
+
+	// This cannot fail in as many ways as the first version, and the return
+	// type should reflect that.
+	pub fn try_apply_type <D, F>
+	(
+		&self,
+		ty_tokens: TokenStream,
+		mut apply_inner: F
+	)
+	-> Result <Option <TokenStream>, ApplicationError>
+	where
+		D: TransformDirection,
+		F: FnMut (TokenStream)
+			-> Result <Option <TokenStream>, ApplicationError>
+	{
+		let mut autotransform_bindings: AutotransformBindings =
+			match D::from_type (self) . match_tokens (ty_tokens)
+		{
+			Ok (bindings) => bindings,
+			Err (_) => return Ok (None)
+		};
+
+		for (_transformable_ident, transformable_ty)
+		in autotransform_bindings . inner_types_mut ()
+		{
+			match apply_inner (transformable_ty . to_token_stream ())?
+			{
+				Some (transformed_ty) =>
+					*transformable_ty = parse2 (transformed_ty)?,
+				None => continue
+			}
+		}
+
+		let transformed_ty =
+			D::to_type (self) . substitute (autotransform_bindings)?;
+
+		Ok (Some (transformed_ty))
 	}
 }
 
@@ -170,6 +227,7 @@ impl TransformDirection for Backward
 pub enum ApplicationError
 {
 	Transform (syn::parse::Error),
+	Collect (ParameterBindingMismatch <TokenStream>),
 	Substitute (SubstitutionError <AutotransformBindingType>)
 }
 
@@ -178,6 +236,14 @@ impl From <syn::parse::Error> for ApplicationError
 	fn from (m: syn::parse::Error) -> Self
 	{
 		Self::Transform (m)
+	}
+}
+
+impl From <ParameterBindingMismatch <TokenStream>> for ApplicationError
+{
+	fn from (c: ParameterBindingMismatch <TokenStream>) -> Self
+	{
+		Self::Collect (c)
 	}
 }
 
@@ -196,6 +262,7 @@ impl Display for ApplicationError
 		match self
 		{
 			Self::Transform (m) => Display::fmt (m, f),
+			Self::Collect (c) => Display::fmt (c, f),
 			Self::Substitute (s) => Display::fmt (s, f)
 		}
 	}
@@ -212,6 +279,7 @@ impl Into <syn::parse::Error> for ApplicationError
 		match self
 		{
 			Self::Transform (m) => m,
+			Self::Collect (c) => c . into (),
 			Self::Substitute (s) => s . into ()
 		}
 	}

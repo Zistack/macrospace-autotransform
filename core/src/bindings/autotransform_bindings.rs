@@ -229,7 +229,7 @@ impl MergeableBindings for AutotransformBindings
 							other_value
 						)
 					);
-				}
+				},
 				Entry::Vacant (vacant) =>
 				{
 					vacant . insert (other_value);
