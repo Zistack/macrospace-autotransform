@@ -1,8 +1,7 @@
 use proc_macro2::TokenStream;
 
-use syn::{Lifetime, Expr, Token};
+use syn::Expr;
 use syn::parse::{Parse, ParseStream};
-use syn_derive::{Parse, ToTokens};
 use quote::ToTokens;
 
 use crate::{
@@ -12,29 +11,6 @@ use crate::{
 	Backward,
 	ApplicationError
 };
-
-#[derive (Clone, Debug, Parse, ToTokens)]
-struct OwnedSelf
-{
-	self_token: Token! [Self],
-}
-
-#[derive (Clone, Debug, Parse, ToTokens)]
-struct RefSelf
-{
-	ampersand_token: Token! [&],
-	lifetime: Option <Lifetime>,
-	self_token: Token! [Self]
-}
-
-#[derive (Clone, Debug, Parse, ToTokens)]
-struct RefMutSelf
-{
-	ampersand_token: Token! [&],
-	lifetime: Option <Lifetime>,
-	mut_token: Token! [mut],
-	self_token: Token! [Self]
-}
 
 #[derive (Clone, Debug)]
 pub struct AutotransformBank
