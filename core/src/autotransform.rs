@@ -54,14 +54,7 @@ pub struct Autotransform
 
 impl Autotransform
 {
-	/*
-	fn validate () -> Result <(), >
-	{
-		// We might need a new visitor for this one.
-	}
-	*/
-
-	pub fn try_parse (input: ParseStream) -> syn::Result <Option <Self>>
+	pub fn try_parse (input: ParseStream <'_>) -> syn::Result <Option <Self>>
 	{
 		let speculative = input . fork ();
 
@@ -76,6 +69,25 @@ impl Autotransform
 
 		Ok (Some (input . parse ()?))
 	}
+
+	pub fn parse_all (input: ParseStream <'_>) -> syn::Result <Vec <Self>>
+	{
+		let mut autotransforms = Vec::new ();
+
+		while let Some (autotransform) = Autotransform::try_parse (input)?
+		{
+			autotransforms . push (autotransform);
+		}
+
+		Ok (autotransforms)
+	}
+
+	/*
+	fn validate () -> Result <(), >
+	{
+		// We might need a new visitor for this one.
+	}
+	*/
 
 	pub fn try_apply <D, F>
 	(

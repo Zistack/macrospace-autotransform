@@ -1,12 +1,39 @@
-fn impl_fn
+use macrospace::parse_args;
+use macrospace::generics::get_path_arguments;
+use macrospace::path_utils::as_prefix;
+use macrospace::substitute::Substitutions;
+use syn::{
+	Generics,
+	Path,
+	ItemFn,
+	Signature,
+	FnArg,
+	Expr,
+	PatType,
+	ReturnType,
+	Token,
+	parse2,
+	bracketed,
+	parse_quote
+};
+use syn::fold::Fold;
+use syn::parse::{Parse, ParseStream, Result, Error};
+use syn::punctuated::Punctuated;
+use quote::{ToTokens, quote};
+
+use macrospace_autotransform_core::AutotransformBank;
+
+use super::kw;
+
+fn impl_fn_inner
 (
-	generics: Generics,
+	mut generics: Generics,
 	fn_path: Path,
 	orig_fn: ItemFn,
 	to_delegate_transform: AutotransformBank,
 	from_delegate_transform: AutotransformBank
 )
--> Result <TokenStream>
+-> Result <proc_macro2::TokenStream>
 {
 	let ItemFn
 	{
@@ -19,16 +46,17 @@ fn impl_fn
 			unsafety,
 			abi,
 			ident,
-			generics as orig_generics,
+			generics: orig_generics,
 			inputs,
-			output
+			output,
+			..
 		},
-		...
+		..
 	}
 		= orig_fn;
 
-	let fn_path_arguments = get_path_arguments (fn_path)?;
-	let substitutions = Substitutions::try_from_generics
+	let fn_path_arguments = get_path_arguments (&fn_path)?;
+	let mut substitutions = Substitutions::try_from_path_arguments
 	(
 		&orig_generics . params,
 		&fn_path_arguments
@@ -52,19 +80,14 @@ fn impl_fn
 			);
 	}
 
-	let inputs: Punctuated <FnArg, Token! [,]> = inputs
-		. into_iterator ()
-		. map (|fn_arg| substitute . fold_fn_arg (fn_arg))
-		. collect ();
-
-	let mut new_inputs: Punctuated <FnArg, Token! [,]>::new ();
-	let mut arg_expressions: Punctuated <Expr, Token! [,]>::new ();
+	let mut new_inputs = Punctuated::<FnArg, Token! [,]>::new ();
+	let mut arg_expressions = Punctuated::<Expr, Token! [,]>::new ();
 
 	for input in inputs
 	{
-		match input
+		match substitutions . fold_fn_arg (input)
 		{
-			Receiver (input) => return Err
+			FnArg::Receiver (input) => return Err
 			(
 				Error::new_spanned
 				(
@@ -72,68 +95,201 @@ fn impl_fn
 					"fn items should not have receiver types"
 				)
 			),
-			Typed (PatType {attrs, pat, ty, ..) =>
+			FnArg::Typed (PatType {attrs, pat, ty, ..}) =>
 			{
-				let (transformed_type, closure_expr) = to_delegate_transform
-					. try_apply_reverse (input . ty . to_token_stream ())?;
-
-				let transformed_fn_arg: FnArg =
-					parse_quote! (#attrs #pat : #transformed_type);
-
-				let transformed_expr: Expr =
-					parse_quote! ((#closure_expr) (#pat));
-
-				new_inputs . push (transformed_fn_arg);
-				arg_expression . push (transformed_expr);
+				match to_delegate_transform . try_apply_backward
+				(
+					&ty . to_token_stream (),
+					&parse_quote! (#pat)
+				) . map_err (|e| Into::<Error>::into (e))?
+				{
+					Some ((transformed_ty, transformed_expr)) =>
+					{
+						new_inputs . push
+						(
+							parse_quote! (#(#attrs)* #pat : #transformed_ty)
+						);
+						arg_expressions . push (parse2 (transformed_expr)?);
+					},
+					None =>
+					{
+						new_inputs . push (parse_quote! (#(#attrs)* #pat : #ty));
+						arg_expressions . push (parse_quote! (#pat));
+					}
+				}
 			}
 		}
 	}
 
 	let fn_expr = as_prefix (fn_path);
 
-	let call_expr = quote! (#fn_expr (#arg_expressions))
+	let call_expr = parse_quote! (#fn_expr (#arg_expressions));
 
 	let call_expr = match asyncness
 	{
-		Some (_) => quote! (#call_expr . await),
+		Some (_) => parse_quote! (#call_expr . await),
 		None => call_expr
 	};
 
-	let output = substitute . fold_return_type (output);
+	let output = substitutions . fold_return_type (output);
 
 	let (new_output, body_expr) = match output
 	{
 		ReturnType::Default => (ReturnType::Default, call_expr),
-		ReturnType::Type (arrow_token, ty) =>
+		ReturnType::Type (arrow_token, ty) => match from_delegate_transform
+			. try_apply_forward
+		(
+			&ty . to_token_stream (),
+			&call_expr
+		) . map_err (|e| Into::<Error>::into (e))?
 		{
-			let (transformed_type, closure_expr) = from_delegate_transform
-				. try_apply (ty . to_token_stream ())?;
+			Some ((transformed_ty, body_expr)) =>
+			{
+				let transformed_output = ReturnType::Type
+				(
+					Default::default (),
+					Box::new (parse2 (transformed_ty)?)
+				);
 
-			let transformed_output = ReturnType::Type
-			(
-				Default::default (),
-				transformed_type
-			);
-
-			let body_expr = quote! ((#closure_expr) (#call_expr));
-
-			(transformed_output, body_expr)
+				(transformed_output, parse2 (body_expr)?)
+			},
+			None => (ReturnType::Type (arrow_token, ty), call_expr)
 		}
-	}
+	};
 
 	let (impl_generics, _, where_clause) = generics . split_for_impl ();
 
 	let tokens = quote!
 	{
-		#attrs
+		#(#attrs)*
 		#vis #constness #asyncness #unsafety #abi
 		fn #ident #impl_generics (#new_inputs) #new_output
+		#where_clause
 		{
 			#body_expr
 		}
-	}l
+	};
 
 	Ok (tokens)
 }
 
-fn impl_method (autotransform_bank: AutotransformBank, sig: Signature)
+#[derive (Clone, Debug)]
+struct ImplFnInput
+{
+	fn_token: Token! [fn],
+	generics: Generics,
+	fn_path: Path,
+	with_token: kw::with,
+	to_bracket_token: syn::token::Bracket,
+	to_delegate_transforms: AutotransformBank,
+	arrow_token: Token! [->],
+	from_bracket_token: syn::token::Bracket,
+	from_delegate_transforms: AutotransformBank,
+	// where clause
+	semicolon_token: Token! [;]
+}
+
+impl Parse for ImplFnInput
+{
+	fn parse (input: ParseStream <'_>) -> Result <Self>
+	{
+		let fn_token = input . parse ()?;
+		let mut generics: Generics = input . parse ()?;
+		let fn_path = input . parse ()?;
+		let with_token = input . parse ()?;
+
+		let content;
+		let to_bracket_token = bracketed! (content in input);
+		let to_delegate_transforms = content . parse ()?;
+
+		let arrow_token = input . parse ()?;
+
+		let content;
+		let from_bracket_token = bracketed! (content in input);
+		let from_delegate_transforms = content . parse ()?;
+
+		generics . where_clause = input . parse ()?;
+
+		let semicolon_token = input . parse ()?;
+
+		Ok
+		(
+			Self
+			{
+				fn_token,
+				generics,
+				fn_path,
+				with_token,
+				to_bracket_token,
+				to_delegate_transforms,
+				arrow_token,
+				from_bracket_token,
+				from_delegate_transforms,
+				semicolon_token
+			}
+		)
+	}
+}
+
+impl ToTokens for ImplFnInput
+{
+	fn to_tokens (&self, tokens: &mut proc_macro2::TokenStream)
+	{
+		self . fn_token . to_tokens (tokens);
+		self . generics . to_tokens (tokens);
+		self . fn_path . to_tokens (tokens);
+		self . with_token . to_tokens (tokens);
+
+		self . to_bracket_token . surround
+		(
+			tokens,
+			|inner_tokens|
+			self . to_delegate_transforms . to_tokens (inner_tokens)
+		);
+
+		self . arrow_token . to_tokens (tokens);
+
+		self . from_bracket_token . surround
+		(
+			tokens,
+			|inner_tokens|
+			self . from_delegate_transforms . to_tokens (inner_tokens)
+		);
+
+		self . generics . where_clause . to_tokens (tokens);
+
+		self . semicolon_token . to_tokens (tokens);
+	}
+}
+
+fn try_impl_fn_impl (input: proc_macro::TokenStream)
+-> Result <proc_macro2::TokenStream>
+{
+	let (orig_fn, tokens) = parse_args! (1, input)?;
+
+	let ImplFnInput
+	{
+		generics,
+		fn_path,
+		to_delegate_transforms,
+		from_delegate_transforms,
+		..
+	}
+		= parse2 (tokens)?;
+
+	impl_fn_inner
+	(
+		generics,
+		fn_path,
+		orig_fn,
+		to_delegate_transforms,
+		from_delegate_transforms
+	)
+}
+
+pub fn impl_fn_impl (input: proc_macro::TokenStream) -> proc_macro::TokenStream
+{
+	try_impl_fn_impl (input)
+		. unwrap_or_else (Error::into_compile_error)
+		. into ()
+}

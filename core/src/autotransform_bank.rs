@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 
 use syn::Expr;
-use syn::parse::{Parse, ParseStream};
+use syn_derive::Parse;
 use quote::ToTokens;
 
 use crate::{
@@ -12,9 +12,10 @@ use crate::{
 	ApplicationError
 };
 
-#[derive (Clone, Debug)]
+#[derive (Clone, Debug, Parse)]
 pub struct AutotransformBank
 {
+	#[parse (Autotransform::parse_all)]
 	transforms: Vec <Autotransform>
 }
 
@@ -110,21 +111,6 @@ impl From <Vec <Autotransform>> for AutotransformBank
 	fn from (transforms: Vec <Autotransform>) -> Self
 	{
 		Self {transforms}
-	}
-}
-
-impl Parse for AutotransformBank
-{
-	fn parse (input: ParseStream <'_>) -> syn::Result <Self>
-	{
-		let mut transforms = Vec::new ();
-
-		while let Some (autotransform) = Autotransform::try_parse (input)?
-		{
-			transforms . push (autotransform);
-		}
-
-		Ok (Self {transforms})
 	}
 }
 

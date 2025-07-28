@@ -47,7 +47,9 @@ dependencies = [
  "macrospace",
  "macrospace-autotransform-core",
  "proc-macro2",
+ "quote",
  "syn",
+ "syn_derive 0.2.0",
 ]
 
 [[package]]
