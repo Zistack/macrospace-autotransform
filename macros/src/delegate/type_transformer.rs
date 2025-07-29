@@ -1,140 +1,21 @@
 use std::collections::HashMap;
 
 use macrospace::substitute::Substitutions;
-use proc_macro2::{TokenStream, TokenTree, Delimiter};
-use syn::{Ident, AngleBracketedGenericArguments, Type, Path, Generics, Token, parse_quote};
+use macrospace::pattern::expect_tokens;
+use syn::{
+	Ident,
+	AngleBracketedGenericArguments,
+	Type,
+	Path,
+	Generics,
+	Token,
+	parse_quote
+};
 use syn::fold::{Fold, fold_type};
-use syn::parse::{Parser, ParseStream, Result, Error};
+use syn::parse::{Parser, ParseStream, Result};
 use syn::punctuated::Punctuated;
 use syn_derive::Parse;
 use quote::{ToTokens, quote};
-
-fn expect_token_tree (input: ParseStream <'_>, expected_token_tree: TokenTree)
--> Result <()>
-{
-	let input_token_tree = input . parse ()?;
-
-	match (input_token_tree, expected_token_tree)
-	{
-		(TokenTree::Group (input_group), TokenTree::Group (expected_group)) =>
-		{
-			let input_delimiter = input_group . delimiter ();
-			let expected_delimiter = expected_group . delimiter ();
-
-			if input_delimiter != expected_delimiter
-			{
-				let expected_char = match expected_delimiter
-				{
-					Delimiter::Parenthesis => "(",
-					Delimiter::Brace => "{",
-					Delimiter::Bracket => "[",
-					Delimiter::None => "∅"
-				};
-
-				return Err
-				(
-					Error::new
-					(
-						input_group . span_open (),
-						format! ("expected `{}`", expected_char)
-					)
-				);
-			}
-
-			let parser = |input: ParseStream <'_>|
-			{
-				expect_tokens (input, expected_group . stream ())
-			};
-
-			return parser . parse2 (input_group . stream ());
-		},
-		(TokenTree::Ident (input_ident), TokenTree::Ident (expected_ident)) =>
-		{
-			if input_ident != expected_ident
-			{
-				return Err
-				(
-					Error::new_spanned
-					(
-						input_ident,
-						format! ("expected `{}`", expected_ident)
-					)
-				);
-			}
-		},
-		(TokenTree::Punct (input_punct), TokenTree::Punct (expected_punct)) =>
-		{
-			if input_punct . as_char () != expected_punct . as_char ()
-			{
-				return Err
-				(
-					Error::new_spanned
-					(
-						input_punct,
-						format! ("expected `{}`", expected_punct)
-					)
-				);
-			}
-		},
-		(TokenTree::Literal (input_literal), TokenTree::Literal (expected_literal)) =>
-		{
-			if input_literal . to_string () != expected_literal . to_string ()
-			{
-				return Err
-				(
-					Error::new_spanned
-					(
-						input_literal,
-						format! ("expected `{}`", expected_literal)
-					)
-				);
-			}
-		},
-		(input @ _, TokenTree::Group (expected_group)) =>
-		{
-			let expected_char = match expected_group . delimiter ()
-			{
-					Delimiter::Parenthesis => "(",
-					Delimiter::Brace => "{",
-					Delimiter::Bracket => "[",
-					Delimiter::None => "∅"
-			};
-
-			return Err
-			(
-				Error::new
-				(
-					input . span (),
-					format! ("expected `{}`", expected_char)
-				)
-			);
-		},
-		(input @ _, expected @ _) =>
-		{
-			return Err
-			(
-				Error::new
-				(
-					input . span (),
-					format! ("expected `{}`", expected)
-				)
-			);
-		}
-	}
-
-	Ok (())
-}
-
-fn expect_tokens (input: ParseStream <'_>, expected_tokens: TokenStream)
--> Result <()>
-{
-	for expected_token_tree in expected_tokens
-	{
-		expect_token_tree (input, expected_token_tree)?;
-	}
-
-	Ok (())
-}
 
 #[derive (Clone, Debug, Parse)]
 struct AssocBindings
