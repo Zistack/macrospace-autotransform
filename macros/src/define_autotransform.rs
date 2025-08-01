@@ -8,7 +8,9 @@ use macrospace_autotransform_core::Autotransform;
 fn try_define_autotransform_impl (input: proc_macro::TokenStream)
 -> Result <proc_macro2::TokenStream>
 {
-	let autotransform: Autotransform = parse (input)?;
+	let mut autotransform: Autotransform = parse (input)?;
+
+	autotransform . validate ()?;
 
 	let tokens = generate_item_macro
 	(
