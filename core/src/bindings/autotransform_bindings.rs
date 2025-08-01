@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use macrospace::pattern::{
 	CursorParse,
+	ParameterCollector,
 	MatchBindings,
 	MergeableBindings,
 	SubstitutionBindings,
@@ -19,6 +20,8 @@ use syn::buffer::Cursor;
 use syn::parse::ParseStream;
 use syn_derive::{Parse, ToTokens};
 use quote::ToTokens;
+
+use super::ExprParameters;
 
 mod kw
 {
@@ -133,6 +136,137 @@ impl Display for AutotransformBindingValue
 	fn fmt (&self, f: &mut Formatter <'_>) -> Result <(), std::fmt::Error>
 	{
 		Display::fmt (&self . to_token_stream (), f)
+	}
+}
+
+#[derive (Default, Clone, Debug, PartialEq, Eq)]
+pub struct AutotransformParameters
+{
+	params: HashMap <Ident, AutotransformBindingType>
+}
+
+impl AutotransformParameters
+{
+	pub fn assert_superset (&self, other: &Self)
+	-> Result <(), syn::parse::Error>
+	{
+		for (other_ident, other_ty) in other . params . iter ()
+		{
+			match self . params . get (other_ident)
+			{
+				Some (self_ty) => if self_ty != other_ty
+				{
+					return Err
+					(
+						ParameterBindingMismatch::new
+						(
+							other_ident . clone (),
+							self_ty,
+							other_ty
+						)
+							. into ()
+					)
+				},
+				None =>
+				{
+					return Err
+					(
+						syn::parse::Error::new_spanned
+						(
+							other_ident,
+							"parameter does not exist in other type pattern"
+						)
+					)
+				}
+			}
+		}
+
+		Ok (())
+	}
+
+	pub fn assert_expr_superset (&self, other: &ExprParameters)
+	-> Result <(), syn::parse::Error>
+	{
+		for expr_ident in other . params . keys ()
+		{
+			match self . params . get (expr_ident)
+			{
+				Some (ty) => if let AutotransformBindingType::InnerType (_) = ty
+				{
+					continue;
+				}
+				else
+				{
+					return Err
+					(
+						syn::parse::Error::new_spanned
+						(
+							expr_ident,
+							"parameter refers to non-transformable type"
+						)
+					)
+				},
+				None =>
+				{
+					return Err
+					(
+						syn::parse::Error::new_spanned
+						(
+							expr_ident,
+							"no such parameter found in type patterns"
+						)
+					)
+				}
+			}
+		}
+
+		Ok (())
+	}
+}
+
+impl ParameterCollector <TypedParameter <AutotransformBindingType>>
+for AutotransformParameters
+{
+	fn add_parameter
+	(
+		&mut self,
+		parameter: TypedParameter <AutotransformBindingType>
+	)
+	{
+		self . params . insert (parameter . ident, parameter . ty);
+	}
+}
+
+impl MergeableBindings for AutotransformParameters
+{
+	type Error = ParameterBindingMismatch <AutotransformBindingType>;
+
+	fn try_merge (&mut self, other: Self) -> Result <(), Self::Error>
+	{
+		for (other_ident, other_ty) in other . params
+		{
+			match self . params . entry (other_ident . clone ())
+			{
+				Entry::Occupied (occupied) => if *occupied . get () != other_ty
+				{
+					return Err
+					(
+						ParameterBindingMismatch::new
+						(
+							other_ident,
+							occupied . get () . clone (),
+							other_ty
+						)
+					);
+				},
+				Entry::Vacant (vacant) =>
+				{
+					vacant . insert (other_ty);
+				}
+			}
+		}
+
+		Ok (())
 	}
 }
 

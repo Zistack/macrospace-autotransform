@@ -25,12 +25,12 @@ mod kw
 #[derive (Clone, Debug, Parse, ToTokens)]
 pub struct SubvalueParameter
 {
-	dollar_token: Token! [$],
-	ident: Ident,
+	pub dollar_token: Token! [$],
+	pub ident: Ident,
 	#[syn (parenthesized)]
-	paren_token: Paren,
+	pub paren_token: Paren,
 	#[syn (in = paren_token)]
-	arg_expr: Expr
+	pub arg_expr: Expr
 }
 
 impl CursorParse for SubvalueParameter
@@ -94,8 +94,8 @@ impl Display for SubvalueParameter
 #[derive (Clone, Debug, Parse, ToTokens)]
 pub struct ArgParameter
 {
-	dollar_token: Token! [$],
-	arg_token: kw::arg
+	pub dollar_token: Token! [$],
+	pub arg_token: kw::arg
 }
 
 impl CursorParse for ArgParameter
@@ -179,7 +179,7 @@ impl Display for ExprParameter
 #[derive (Default)]
 pub struct ExprParameters
 {
-	params: HashMap <Ident, Expr>
+	pub (in crate::bindings) params: HashMap <Ident, Expr>
 }
 
 impl ExprParameters

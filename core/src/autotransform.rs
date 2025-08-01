@@ -8,7 +8,7 @@ use macrospace::pattern::{
 	ParameterBindingMismatch
 };
 use proc_macro2::TokenStream;
-use syn::{Visibility, Ident, Expr, Token, parse2};
+use syn::{Visibility, Ident, Expr, Type, Token, parse2};
 use syn::parse::ParseStream;
 use syn::token::{Brace, Bracket};
 use syn_derive::{Parse, ToTokens};
@@ -17,9 +17,11 @@ use quote::ToTokens;
 use crate::bindings::{
 	AutotransformBindings,
 	AutotransformBindingType,
+	AutotransformParameters,
 	ExprParameter,
 	ExprBindings,
-	ExprParameters
+	ExprParameters,
+	ValidationTokens
 };
 
 mod kw
@@ -82,12 +84,26 @@ impl Autotransform
 		Ok (autotransforms)
 	}
 
-	/*
-	fn validate () -> Result <(), >
+	pub fn validate (&mut self) -> syn::Result <()>
 	{
-		// We might need a new visitor for this one.
+		let to_params = self
+			. to_type
+			. validate_as_and_collect::<Type, AutotransformParameters, ValidationTokens> ()?;
+		let from_params = self
+			. from_type
+			. validate_as_and_collect::<Type, AutotransformParameters, ValidationTokens> ()?;
+
+		let expr_params = self
+			. transform_expr
+			. validate_as_and_collect::<Expr, ExprParameters, ValidationTokens> ()?;
+
+		to_params . assert_superset (&from_params)?;
+		from_params . assert_superset (&to_params)?;
+
+		to_params . assert_expr_superset (&expr_params)?;
+
+		Ok (())
 	}
-	*/
 
 	pub fn try_apply <D, F>
 	(
