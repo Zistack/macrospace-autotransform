@@ -24,7 +24,7 @@ use crate::bindings::{
 	ValidationTokens
 };
 
-mod kw
+pub mod kw
 {
 	syn::custom_keyword! (autotransform);
 }

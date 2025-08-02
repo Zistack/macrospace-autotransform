@@ -8,6 +8,21 @@ pub fn define_autotransform (input: TokenStream) -> TokenStream
 	define_autotransform::define_autotransform_impl (input)
 }
 
+mod group_autotransforms;
+
+#[proc_macro]
+pub fn group_autotransforms (input: TokenStream) -> TokenStream
+{
+	group_autotransforms::group_autotransforms_impl (input)
+}
+
+#[doc (hidden)]
+#[proc_macro]
+pub fn __group_autotransforms_inner__ (input: TokenStream) -> TokenStream
+{
+	group_autotransforms::group_autotransforms_inner_impl (input)
+}
+
 mod delegate;
 
 #[doc (hidden)]
