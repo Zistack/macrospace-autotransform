@@ -40,7 +40,7 @@ fn delegate_inner (impl_blocks: Vec <UserAutotransformImplBlock>)
 		(
 			generate_macrospace_invokation
 			(
-				parse_quote! (macrospace_autotransform::_post_gather_delegate__),
+				parse_quote! (macrospace_autotransform::__post_gather_delegate__),
 				transform_args,
 				pre_gather_block
 			)
