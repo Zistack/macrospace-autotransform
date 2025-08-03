@@ -34,6 +34,27 @@ name = "macrospace-autotransform"
 version = "0.1.0"
 dependencies = [
  "macrospace",
+ "macrospace-autotransform-core",
+ "macrospace-autotransform-macros",
+]
+
+[[package]]
+name = "macrospace-autotransform-core"
+version = "0.1.0"
+dependencies = [
+ "macrospace",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "syn_derive 0.2.0",
+]
+
+[[package]]
+name = "macrospace-autotransform-macros"
+version = "0.1.0"
+dependencies = [
+ "macrospace",
+ "macrospace-autotransform-core",
  "proc-macro2",
  "quote",
  "syn",
