@@ -19,7 +19,7 @@ for ValidationTokens
 	-> TokenStream
 	{
 		let ident = &p . ident;
-		let lifetime = Lifetime::new (&ident . to_string (), ident . span ());
+		let lifetime = Lifetime::new (&format! ("'{}", ident), ident . span ());
 
 		match p . ty
 		{
@@ -36,7 +36,7 @@ impl DummyTokens <SubvalueParameter> for ValidationTokens
 {
 	fn dummy_tokens (p: &SubvalueParameter) -> TokenStream
 	{
-		p . to_token_stream ()
+		p . ident . to_token_stream ()
 	}
 }
 
