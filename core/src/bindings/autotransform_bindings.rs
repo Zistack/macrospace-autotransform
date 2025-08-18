@@ -8,7 +8,6 @@ use macrospace::pattern::{
 	MergeableBindings,
 	SubstitutionBindings,
 	TypedParameter,
-	UntypedParameter,
 	ParameterBindingMismatch,
 	ParameterNotFound,
 	ParameterTypeMismatch,
@@ -410,27 +409,5 @@ for AutotransformBindings
 			},
 			None => Err (ParameterNotFound::new (parameter) . into ())
 		}
-	}
-}
-
-impl SubstitutionBindings <UntypedParameter> for AutotransformBindings
-{
-	type Error = ParameterNotFound <UntypedParameter>;
-
-	fn write_parameter_tokens
-	(
-		&self,
-		parameter: UntypedParameter,
-		tokens: &mut TokenStream
-	)
-	-> Result <(), Self::Error>
-	{
-		match self . map . get (&parameter . ident)
-		{
-			Some (value) => value . to_tokens (tokens),
-			None => return Err (ParameterNotFound::new (parameter))
-		}
-
-		Ok (())
 	}
 }

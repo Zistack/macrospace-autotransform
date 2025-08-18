@@ -7,6 +7,7 @@ use macrospace::pattern::{
 	SubstitutionError,
 	ParameterBindingMismatch
 };
+use macrospace::substitute::Argument;
 use proc_macro2::TokenStream;
 use syn::{Visibility, Ident, Expr, Type, Token, parse2};
 use syn::parse::ParseStream;
@@ -14,6 +15,7 @@ use syn::token::{Brace, Bracket};
 use syn_derive::{Parse, ToTokens};
 use quote::ToTokens;
 
+use crate::kw;
 use crate::bindings::{
 	AutotransformBindings,
 	AutotransformBindingType,
@@ -21,13 +23,9 @@ use crate::bindings::{
 	ExprParameter,
 	ExprBindings,
 	ExprParameters,
-	ValidationTokens
+	ValidationTokens,
+	SpecializationBindings
 };
-
-pub mod kw
-{
-	syn::custom_keyword! (autotransform);
-}
 
 #[derive (Clone, Debug, Parse, ToTokens)]
 pub struct Autotransform
@@ -76,7 +74,7 @@ impl Autotransform
 	{
 		let mut autotransforms = Vec::new ();
 
-		while let Some (autotransform) = Autotransform::try_parse (input)?
+		while let Some (autotransform) = Self::try_parse (input)?
 		{
 			autotransforms . push (autotransform);
 		}
@@ -84,7 +82,58 @@ impl Autotransform
 		Ok (autotransforms)
 	}
 
-	pub fn validate (&mut self) -> syn::Result <()>
+	pub fn weak_validate (&mut self) -> syn::Result <()>
+	{
+		let to_params = self
+			. to_type
+			. validate_as_and_collect::<Type, AutotransformParameters, ValidationTokens> ()?;
+		let from_params = self
+			. from_type
+			. validate_as_and_collect::<Type, AutotransformParameters, ValidationTokens> ()?;
+
+		let expr_params = self
+			. transform_expr
+			. validate_as_and_collect::<Expr, ExprParameters, ValidationTokens> ()?;
+
+		to_params . assert_superset (&from_params)?;
+
+		to_params . assert_expr_superset (&expr_params)?;
+
+		Ok (())
+	}
+
+	pub fn specialize <I> (&mut self, assignments: I) -> syn::Result <()>
+	where I: IntoIterator <Item = (Ident, Argument)>
+	{
+		let specialization_bindings =
+			SpecializationBindings::from_iter (assignments);
+
+		self . from_type = Pattern::from
+		(
+			self
+				. from_type
+				. substitute (&specialization_bindings)
+				. map_err (Into::<syn::Error>::into)?
+		);
+		self . to_type = Pattern::from
+		(
+			self
+				. to_type
+				. substitute (&specialization_bindings)
+				. map_err (Into::<syn::Error>::into)?
+		);
+		self . transform_expr = Pattern::from
+		(
+			self
+				. transform_expr
+				. substitute (&specialization_bindings)
+				. map_err (Into::<syn::Error>::into)?
+		);
+
+		Ok (())
+	}
+
+	pub fn strong_validate (&mut self) -> syn::Result <()>
 	{
 		let to_params = self
 			. to_type
@@ -158,11 +207,11 @@ impl Autotransform
 		}
 
 		let transformed_ty =
-			D::to_type (self) . substitute (autotransform_bindings)?;
+			D::to_type (self) . substitute (&autotransform_bindings)?;
 
 		let transformed_expr = self
 			. transform_expr
-			. substitute (expr_bindings)
+			. substitute (&expr_bindings)
 			// This process is infallible.
 			. unwrap ();
 
@@ -202,7 +251,7 @@ impl Autotransform
 		}
 
 		let transformed_ty =
-			D::to_type (self) . substitute (autotransform_bindings)?;
+			D::to_type (self) . substitute (&autotransform_bindings)?;
 
 		Ok (Some (transformed_ty))
 	}
