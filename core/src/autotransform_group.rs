@@ -1,3 +1,5 @@
+use std::iter::{Once, once};
+
 use macrospace::substitute::Argument;
 use syn::{Visibility, Ident};
 use syn::parse::{ParseStream, Result};
@@ -114,63 +116,41 @@ impl AutotransformInput
 				autotransform_group . specialize (assignments)
 		}
 	}
-}
 
-pub struct FlattenAutotransformInputs <I>
-{
-	inputs: I,
-	current_group: Option <<Vec <Autotransform> as IntoIterator>::IntoIter>
-}
-
-impl <I> FlattenAutotransformInputs <I>
-{
-	fn new (inputs: I) -> Self
+	pub fn into_autotransforms (self) -> AutotransformInputIntoIter
 	{
-		Self {inputs, current_group: None}
-	}
-}
-
-impl <I> Iterator for FlattenAutotransformInputs <I>
-where I: Iterator <Item = AutotransformInput>
-{
-	type Item = Autotransform;
-
-	fn next (&mut self) -> Option <Autotransform>
-	{
-		loop
+		match self
 		{
-			if let Some (iter) = &mut self . current_group
-			{
-				match iter . next ()
-				{
-					Some (autotransform) => return Some (autotransform),
-					None => self . current_group = None
-				}
-			}
-
-			match self . inputs . next ()
-			{
-				Some (AutotransformInput::Single (autotransform)) =>
-					return Some (autotransform),
-				Some (AutotransformInput::Group (autotransform_group)) =>
-				{
-					self . current_group = Some
-					(
-						autotransform_group . autotransforms . into_iter ()
-					);
-					continue;
-				},
-				None => return None
-			}
+			Self::Single (autotransform) => AutotransformInputIntoIter::Single
+			(
+				once (autotransform)
+			),
+			Self::Group (autotransform_group) => AutotransformInputIntoIter::Group
+			(
+				autotransform_group . autotransforms . into_iter ()
+			)
 		}
 	}
 }
 
-pub fn flatten_autotransform_inputs <I> (inputs: I)
--> FlattenAutotransformInputs <<I as IntoIterator>::IntoIter>
-where I: IntoIterator <Item = AutotransformInput>
+pub enum AutotransformInputIntoIter
 {
-	FlattenAutotransformInputs::new (inputs . into_iter ())
+	Single (Once <Autotransform>),
+	Group (<Vec <Autotransform> as IntoIterator>::IntoIter)
+}
+
+impl Iterator for AutotransformInputIntoIter
+{
+	type Item = Autotransform;
+
+	fn next (&mut self) -> Option <Self::Item>
+	{
+		match self
+		{
+			Self::Single (one) => one . next (),
+			Self::Group (many) => many . next ()
+		}
+	}
 }
 
 #[derive (Clone, Debug, Parse, ToTokens)]
@@ -185,6 +165,10 @@ impl AutotransformInputs
 {
 	pub fn into_flattened (self) -> Vec <Autotransform>
 	{
-		flatten_autotransform_inputs (self . inputs) . collect ()
+		self
+			. inputs
+			. into_iter ()
+			. flat_map (AutotransformInput::into_autotransforms)
+			. collect ()
 	}
 }
