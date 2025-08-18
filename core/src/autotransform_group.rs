@@ -1,9 +1,11 @@
+use macrospace::substitute::Argument;
 use syn::{Visibility, Ident};
 use syn::parse::{ParseStream, Result};
 use syn_derive::{Parse, ToTokens};
 use quote::TokenStreamExt;
 
 use crate::{Autotransform, kw};
+use crate::bindings::SpecializationBindings;
 
 #[derive (Clone, Debug, Parse, ToTokens)]
 pub struct AutotransformGroup
@@ -18,6 +20,23 @@ pub struct AutotransformGroup
 	#[parse (Autotransform::parse_all)]
 	#[to_tokens (|tokens, val| tokens . append_all (val))]
 	pub autotransforms: Vec <Autotransform>
+}
+
+impl AutotransformGroup
+{
+	pub fn specialize <I> (&mut self, assignments: I) -> syn::Result <()>
+	where I: IntoIterator <Item = (Ident, Argument)>
+	{
+		let specialization_bindings =
+			SpecializationBindings::from_iter (assignments);
+
+		for autotransform in &mut self . autotransforms
+		{
+			autotransform . specialize_with_bindings (&specialization_bindings)?;
+		}
+
+		Ok (())
+	}
 }
 
 #[derive (Clone, Debug, Parse, ToTokens)]
@@ -82,6 +101,18 @@ impl AutotransformInput
 		}
 
 		Ok (autotransform_inputs)
+	}
+
+	pub fn specialize <I> (&mut self, assignments: I) -> syn::Result <()>
+	where I: IntoIterator <Item = (Ident, Argument)>
+	{
+		match self
+		{
+			Self::Single (autotransform) =>
+				autotransform . specialize (assignments),
+			Self::Group (autotransform_group) =>
+				autotransform_group . specialize (assignments)
+		}
 	}
 }
 

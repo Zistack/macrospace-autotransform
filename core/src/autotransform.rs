@@ -108,25 +108,35 @@ impl Autotransform
 		let specialization_bindings =
 			SpecializationBindings::from_iter (assignments);
 
+		self . specialize_with_bindings (&specialization_bindings)
+	}
+
+	pub (in crate) fn specialize_with_bindings
+	(
+		&mut self,
+		specialization_bindings: &SpecializationBindings
+	)
+	-> syn::Result <()>
+	{
 		self . from_type = Pattern::from
 		(
 			self
 				. from_type
-				. substitute (&specialization_bindings)
+				. substitute (specialization_bindings)
 				. map_err (Into::<syn::Error>::into)?
 		);
 		self . to_type = Pattern::from
 		(
 			self
 				. to_type
-				. substitute (&specialization_bindings)
+				. substitute (specialization_bindings)
 				. map_err (Into::<syn::Error>::into)?
 		);
 		self . transform_expr = Pattern::from
 		(
 			self
 				. transform_expr
-				. substitute (&specialization_bindings)
+				. substitute (specialization_bindings)
 				. map_err (Into::<syn::Error>::into)?
 		);
 
