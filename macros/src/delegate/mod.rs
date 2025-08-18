@@ -3,6 +3,8 @@ mod kw
 	syn::custom_keyword! (with);
 }
 
+mod autotransform_path;
+
 mod autotransform_impl_block;
 use autotransform_impl_block::*;
 

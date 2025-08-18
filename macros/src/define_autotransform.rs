@@ -10,7 +10,7 @@ fn try_define_autotransform_impl (input: proc_macro::TokenStream)
 {
 	let mut autotransform: Autotransform = parse (input)?;
 
-	autotransform . validate ()?;
+	autotransform . weak_validate ()?;
 
 	let tokens = generate_item_macro
 	(

@@ -1,13 +1,15 @@
 use proc_macro2::TokenStream;
-use syn::{Generics, Path, Token, LitInt, bracketed, braced};
+use syn::{Generics, Path, bracketed, braced};
 use syn::parse::{Parse, ParseStream, Result, Error};
-use syn::punctuated::Punctuated;
-use syn_derive::{Parse, ToTokens};
 use quote::ToTokens;
 
-use macrospace_autotransform_core::{Autotransform, AutotransformBank};
+use macrospace_autotransform_core::{
+	AutotransformInputs,
+	AutotransformBank
+};
 
 use super::{AutotransformImplItem, kw};
+use super::autotransform_path::*;
 
 #[derive (Clone, Debug)]
 pub struct AutotransformImplBlock <A>
@@ -137,72 +139,25 @@ where A: ToTokens
 	}
 }
 
-#[derive (Clone, Debug, Parse, ToTokens)]
-pub struct AutotransformPaths
-{
-	#[parse (Punctuated::parse_terminated)]
-	pub paths: Punctuated <Path, Token! [,]>
-}
-
 pub type UserAutotransformImplBlock =
 	AutotransformImplBlock <AutotransformPaths>;
-pub type PreGatherImplBlock =
-	AutotransformImplBlock <LitInt>;
 pub type PostGatherImplBlock =
 	AutotransformImplBlock <AutotransformBank>;
 
 impl UserAutotransformImplBlock
 {
-	pub fn into_pre_gather (self)
-	->
-	(
-		AutotransformPaths,
-		AutotransformPaths,
-		PreGatherImplBlock
-	)
-	{
-		let pre_gather_block = PreGatherImplBlock
-		{
-			impl_token: self . impl_token,
-			generics: self . generics,
-			receiver_type_path: self . receiver_type_path,
-			with_token: self . with_token,
-			to_bracket_token: self . to_bracket_token,
-			to_delegate_transforms: LitInt::new
-			(
-				&self . to_delegate_transforms . paths . len () . to_string (),
-				proc_macro2::Span::call_site ()
-			),
-			arrow_token: self . arrow_token,
-			from_bracket_token: self . from_bracket_token,
-			from_delegate_transforms: LitInt::new
-			(
-				&self . from_delegate_transforms . paths . len () . to_string (),
-				proc_macro2::Span::call_site ()
-			),
-			brace_token: self . brace_token,
-			impl_items: self . impl_items
-		};
-
-		(
-			self . to_delegate_transforms,
-			self . from_delegate_transforms,
-			pre_gather_block
-		)
-	}
-}
-
-impl PreGatherImplBlock
-{
-	pub fn try_into_post_gather (self, autotransforms: Vec <Autotransform>)
+	pub fn try_into_post_gather (self, autotransforms: AutotransformInputs)
 	-> Result <PostGatherImplBlock>
 	{
-		let num_to_delegate_transforms: usize =
-			self . to_delegate_transforms . base10_parse ()?;
-		let num_from_delegate_transforms: usize =
-			self . from_delegate_transforms . base10_parse ()?;
+		let num_to_delegate_transforms =
+			self . to_delegate_transforms . paths . len ();
+		let num_from_delegate_transforms =
+			self . from_delegate_transforms . paths . len ();
 
-		if autotransforms . len () < num_to_delegate_transforms
+		let total_expected_transforms =
+			num_to_delegate_transforms + num_from_delegate_transforms;
+
+		if autotransforms . inputs . len () != total_expected_transforms
 		{
 			return Err
 			(
@@ -211,32 +166,75 @@ impl PreGatherImplBlock
 					&self . to_delegate_transforms,
 					format!
 					(
-						"expected at least {} autotransforms, found {}",
-						num_to_delegate_transforms,
-						autotransforms . len ()
+						"expected at {} autotransforms, found {}",
+						total_expected_transforms,
+						autotransforms . inputs . len ()
 					)
 				)
 			);
 		}
 
-		let mut to_delegate_transforms = autotransforms;
-		let from_delegate_transforms =
-			to_delegate_transforms . split_off (num_to_delegate_transforms);
+		let mut to_delegate_transforms = Vec::new ();
+		let mut from_delegate_transforms = Vec::new ();
 
-		if from_delegate_transforms . len () != num_from_delegate_transforms
-		{
-			return Err
+		let mut autotransform_inputs_iter =
+			autotransforms . inputs . into_iter ();
+
+		for (autotransform_path, mut autotransform_input)
+		in self
+			. to_delegate_transforms
+			. paths
+			. into_iter ()
+			. zip
 			(
-				Error::new_spanned
+				(&mut autotransform_inputs_iter)
+					. take (num_to_delegate_transforms)
+			)
+		{
+			if let Some (parameters) = autotransform_path
+				. autotransform_parameters
+			{
+				autotransform_input . specialize
 				(
-					&self . from_delegate_transforms,
-					format!
-					(
-						"expected {} autotransforms from delegate type, found {}",
-						num_from_delegate_transforms,
-						from_delegate_transforms . len ()
-					)
-				)
+					parameters
+						. assignments
+						. into_iter ()
+						. map (|assignment| (assignment . ident, assignment . value))
+				)?;
+			}
+
+			to_delegate_transforms . extend
+			(
+				autotransform_input . into_autotransforms ()
+			);
+		}
+
+		for (autotransform_path, mut autotransform_input)
+		in self
+			. from_delegate_transforms
+			. paths
+			. into_iter ()
+			. zip
+			(
+				(&mut autotransform_inputs_iter)
+					. take (num_from_delegate_transforms)
+			)
+		{
+			if let Some (parameters) = autotransform_path
+				. autotransform_parameters
+			{
+				autotransform_input . specialize
+				(
+					parameters
+						. assignments
+						. into_iter ()
+						. map (|assignment| (assignment . ident, assignment . value))
+				)?;
+			}
+
+			from_delegate_transforms . extend
+			(
+				autotransform_input . into_autotransforms ()
 			);
 		}
 

@@ -4,11 +4,10 @@ use syn::{parse_quote};
 use syn::parse::{Parser, Result, Error};
 use quote::quote;
 
-use macrospace_autotransform_core::Autotransform;
+use macrospace_autotransform_core::AutotransformInputs;
 
 use super::{
 	UserAutotransformImplBlock,
-	PreGatherImplBlock,
 	PostGatherImplBlock,
 	AutotransformImplItem,
 	AutotransformImplTrait,
@@ -22,18 +21,11 @@ fn delegate_inner (impl_blocks: Vec <UserAutotransformImplBlock>)
 
 	for impl_block in impl_blocks
 	{
-		let
-		(
-			to_delegate_transforms,
-			from_delegate_transforms,
-			pre_gather_block
-		)
-			= impl_block . into_pre_gather ();
-
-		let transform_args = to_delegate_transforms
+		let transform_args = impl_block
+			. to_delegate_transforms
 			. paths
-			. into_iter ()
-			. chain (from_delegate_transforms . paths)
+			. iter ()
+			. chain (impl_block . from_delegate_transforms . paths . iter ())
 			. map (|path| parse_quote! (#path: autotransform));
 
 		tokens . extend
@@ -42,7 +34,7 @@ fn delegate_inner (impl_blocks: Vec <UserAutotransformImplBlock>)
 			(
 				parse_quote! (macrospace_autotransform::__post_gather_delegate__),
 				transform_args,
-				pre_gather_block
+				&impl_block
 			)
 		);
 	}
@@ -183,13 +175,12 @@ fn post_gather_delegate_inner (impl_block: PostGatherImplBlock)
 fn try_post_gather_delegate_impl (input: proc_macro::TokenStream)
 -> Result <proc_macro2::TokenStream>
 {
-	let (tokens, pre_gather_impl_block): (proc_macro2::TokenStream, PreGatherImplBlock)
+	let (autotransforms, user_gather_impl_block):
+		(AutotransformInputs, UserAutotransformImplBlock)
 		= parse_args! (1, input)?;
 
-	let autotransforms = Autotransform::parse_all . parse2 (tokens)?;
-
 	let post_gather_impl_block =
-		pre_gather_impl_block . try_into_post_gather (autotransforms)?;
+		user_gather_impl_block . try_into_post_gather (autotransforms)?;
 
 	Ok (post_gather_delegate_inner (post_gather_impl_block)?)
 }

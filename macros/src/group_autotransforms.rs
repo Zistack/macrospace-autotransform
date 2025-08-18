@@ -10,7 +10,7 @@ use syn::spanned::Spanned;
 use syn_derive::{Parse, ToTokens};
 use quote::ToTokens;
 
-use macrospace_autotransform_core::{AutotransformBank, kw};
+use macrospace_autotransform_core::{AutotransformGroup, AutotransformInputs, kw};
 
 #[derive (Clone, Debug, Parse, ToTokens)]
 struct GroupAutotransformsHeader
@@ -75,16 +75,25 @@ fn group_autotransforms_inner
 	vis: Visibility,
 	autotransform_token: kw::autotransform,
 	group_ident: Ident,
-	autotransforms: AutotransformBank
+	autotransforms: AutotransformInputs
 )
 -> proc_macro2::TokenStream
 {
+	let autotransform_group = AutotransformGroup
+	{
+		vis: vis . clone (),
+		autotransform_token,
+		ident: group_ident . clone (),
+		brace_token: Default::default (),
+		autotransforms: autotransforms . into_flattened ()
+	};
+
 	generate_item_macro
 	(
 		&group_ident,
 		&Ident::new ("autotransform", autotransform_token . span ()),
 		&vis,
-		&autotransforms
+		&autotransform_group
 	)
 }
 
