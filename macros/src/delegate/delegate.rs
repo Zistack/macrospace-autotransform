@@ -1,5 +1,6 @@
 use macrospace::{generate_macrospace_invokation, parse_args};
 use macrospace::generics::combine_generics;
+use macrospace::path_utils::without_arguments;
 use syn::{parse_quote};
 use syn::parse::{Parser, Result, Error};
 use quote::quote;
@@ -25,7 +26,15 @@ fn delegate_inner (impl_blocks: Vec <UserAutotransformImplBlock>)
 			. to_delegate_transforms
 			. paths
 			. iter ()
-			. chain (impl_block . from_delegate_transforms . paths . iter ())
+			. map (|p| &p . autotransform_path)
+			. chain
+			(
+				impl_block
+				. from_delegate_transforms
+				. paths
+				. iter ()
+				. map (|p| &p . autotransform_path)
+			)
 			. map (|path| parse_quote! (#path: autotransform));
 
 		tokens . extend
@@ -91,14 +100,18 @@ fn post_gather_delegate_inner (impl_block: PostGatherImplBlock)
 					generics
 				]);
 
-				let (impl_generics, _, where_clause) = generics . split_for_impl ();
+				let stripped_trait_path =
+					without_arguments (trait_path . clone ());
+
+				let (impl_generics, _, where_clause) =
+					generics . split_for_impl ();
 
 				tokens . extend
 				(
 					generate_macrospace_invokation
 					(
 						parse_quote! (macrospace_autotransform::__impl_trait__),
-						[parse_quote! (#trait_path: trait)],
+						[parse_quote! (#stripped_trait_path: trait)],
 						quote!
 						(
 							trait #impl_generics #trait_path
@@ -149,14 +162,17 @@ fn post_gather_delegate_inner (impl_block: PostGatherImplBlock)
 					generics
 				]);
 
-				let (impl_generics, _, where_clause) = generics . split_for_impl ();
+				let stripped_fn_path = without_arguments (fn_path . clone ());
+
+				let (impl_generics, _, where_clause) =
+					generics . split_for_impl ();
 
 				tokens . extend
 				(
 					generate_macrospace_invokation
 					(
 						parse_quote! (macrospace_autotransform::__impl_fn__),
-						[parse_quote! (#fn_path: fn)],
+						[parse_quote! (#stripped_fn_path: fn)],
 						quote!
 						(
 							fn #impl_generics #fn_path
