@@ -155,7 +155,7 @@ fn impl_associated_fn
 				match to_delegate_transforms . try_apply_forward
 			(
 				&ty . to_token_stream (),
-				&parse_quote! (pat)
+				&parse_quote! (#pat)
 			)
 				. map_err (|e| Into::<Error>::into (e))?
 			{
@@ -266,7 +266,7 @@ fn impl_associated_type
 				#(#attrs)*
 				type #ident #impl_generics =
 					<#delegated_receiver_type as #trait_path>::#ident
-				#where_clause
+				#where_clause;
 			}
 		}
 	};
