@@ -7,7 +7,7 @@ use quote::ToTokens;
 #[derive (Clone, Debug, Parse, ToTokens)]
 pub enum AutotransformImplItem
 {
-	#[parse (peek = Token! [impl])]
+	#[parse (peek = Token! [trait])]
 	Trait (AutotransformImplTrait),
 	#[parse (peek = Token! [fn])]
 	Fn (AutotransformImplFn)
