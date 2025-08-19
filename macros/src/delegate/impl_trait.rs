@@ -288,10 +288,18 @@ fn impl_trait_inner
 {
 	let delegated_receiver_type = match to_delegate_transforms
 		. try_apply_type_forward (&receiver_type . to_token_stream ())
-		. map_err (|e| Into::<Error>::into (e))?
+		. map_err (Into::<Error>::into)?
 	{
 		Some (transformed_ty) => parse2 (transformed_ty)?,
 		None => receiver_type . clone ()
+	};
+
+	let delegated_trait_path = match to_delegate_transforms
+		. try_apply_type_forward (&trait_path . to_token_stream ())
+		. map_err (Into::<Error>::into)?
+	{
+		Some (transformed_path) => parse2 (transformed_path)?,
+		None => trait_path . clone ()
 	};
 
 	let ItemTrait
@@ -327,6 +335,11 @@ fn impl_trait_inner
 					)
 			);
 	}
+
+	generics
+		. make_where_clause ()
+		. predicates
+		. push (parse_quote! (#delegated_receiver_type: #delegated_trait_path));
 
 	let mut type_transformer = TypeTransformer::new
 	(
