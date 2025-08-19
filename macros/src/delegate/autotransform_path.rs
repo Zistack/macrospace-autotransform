@@ -12,13 +12,47 @@ pub struct AutotransformParameterAssignment
 	pub value: Argument
 }
 
-#[derive (Clone, Debug, Parse, ToTokens)]
+#[derive (Clone, Debug, ToTokens)]
 pub struct AutotransformParameters
 {
 	pub l_angle_token: Token! [<],
-	#[parse (Punctuated::parse_terminated)]
 	pub assignments: Punctuated <AutotransformParameterAssignment, Token! [,]>,
 	pub r_angle_token: Token! [>]
+}
+
+impl Parse for AutotransformParameters
+{
+	fn parse (input: ParseStream <'_>) -> Result <Self>
+	{
+		let l_angle_token = input . parse ()?;
+
+		let mut assignments = Punctuated::new ();
+
+		loop
+		{
+			if input . peek (Token! [>]) { break; }
+
+			let assignment = input . parse ()?;
+			assignments . push_value (assignment);
+
+			let lookahead = input . lookahead1 ();
+
+			if lookahead . peek (Token! [>]) { break; }
+
+			if lookahead . peek (Token! [,])
+			{
+				assignments . push_punct (input . parse ()?);
+			}
+			else
+			{
+				return Err (lookahead . error ())
+			}
+		}
+
+		let r_angle_token = input . parse ()?;
+
+		Ok (Self {l_angle_token, assignments, r_angle_token})
+	}
 }
 
 #[derive (Clone, Debug, ToTokens)]
