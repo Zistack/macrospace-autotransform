@@ -95,9 +95,9 @@ impl Autotransform
 			. transform_expr
 			. validate_as_and_collect::<Expr, ExprParameters, ValidationTokens> ()?;
 
-		to_params . assert_superset (&from_params)?;
+		from_params . assert_superset (&to_params)?;
 
-		to_params . assert_expr_superset (&expr_params)?;
+		from_params . assert_expr_superset (&expr_params)?;
 
 		Ok (())
 	}
@@ -156,10 +156,10 @@ impl Autotransform
 			. transform_expr
 			. validate_as_and_collect::<Expr, ExprParameters, ValidationTokens> ()?;
 
-		to_params . assert_superset (&from_params)?;
 		from_params . assert_superset (&to_params)?;
+		to_params . assert_superset (&from_params)?;
 
-		to_params . assert_expr_superset (&expr_params)?;
+		from_params . assert_expr_superset (&expr_params)?;
 
 		Ok (())
 	}
