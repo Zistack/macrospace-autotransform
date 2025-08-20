@@ -161,7 +161,7 @@ fn impl_fn_inner
 
 	let tokens = quote!
 	{
-		#[automatically_generated]
+		#[automatically_derived]
 		#(#attrs)*
 		#vis #constness #asyncness #unsafety #abi
 		fn #ident #impl_generics (#new_inputs) #new_output
