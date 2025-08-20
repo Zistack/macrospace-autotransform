@@ -50,12 +50,8 @@ fn impl_associated_const
 	}
 		= trait_item;
 
-	let mut scrubber = Substitutions::scrubber ("__from_def", &generics . params);
-
-	let generics = scrubber . fold_generics (generics);
 	let generics = type_transformer . fold_generics (generics);
 
-	let ty = scrubber . fold_type (ty);
 	let ty = type_transformer . fold_type (ty);
 
 	let (transformed_ty, transformed_expr) = match to_delegate_transforms
@@ -121,9 +117,6 @@ fn impl_associated_fn
 	}
 		= trait_item;
 
-	let mut scrubber = Substitutions::scrubber ("__from_def", &generics . params);
-
-	let generics = scrubber . fold_generics (generics);
 	let generics = type_transformer . fold_generics (generics);
 
 	let mut arg_expressions = Punctuated::<Expr, Token! [,]>::new ();
@@ -132,10 +125,7 @@ fn impl_associated_fn
 	{
 		// The clone here could arguably be replaced with some use of
 		// replace_with!.
-		*input = type_transformer . fold_fn_arg
-		(
-			scrubber . fold_fn_arg (input . clone ())
-		);
+		*input = type_transformer . fold_fn_arg (input . clone ());
 
 		match input
 		{
@@ -177,7 +167,6 @@ fn impl_associated_fn
 		None => call_expr
 	};
 
-	let output = scrubber . fold_return_type (output);
 	let output = type_transformer . fold_return_type (output);
 
 	let body_expr = match &output
@@ -227,9 +216,6 @@ fn impl_associated_type
 	}
 		= trait_item;
 
-	let mut scrubber = Substitutions::scrubber ("__from_def", &generics . params);
-
-	let generics = scrubber . fold_generics (generics);
 	let generics = type_transformer . fold_generics (generics);
 
 	let tokens = match type_transformer . associated_types . get (&ident)
@@ -302,6 +288,12 @@ fn impl_trait_inner
 		None => trait_path . clone ()
 	};
 
+	let mut scrubber = Substitutions::scrubber
+	(
+		"__from_def_",
+		&orig_trait . generics . params
+	);
+
 	let ItemTrait
 	{
 		unsafety,
@@ -309,7 +301,7 @@ fn impl_trait_inner
 		items,
 		..
 	}
-		= orig_trait;
+		= scrubber . fold_item_trait (orig_trait);
 
 	let trait_path_arguments = get_path_arguments (&trait_path)?;
 	let mut substitutions = Substitutions::try_from_path_arguments
@@ -344,7 +336,7 @@ fn impl_trait_inner
 	let mut type_transformer = TypeTransformer::new
 	(
 		receiver_type . clone (),
-		trait_path . clone ()
+		scrubber . fold_path (trait_path . clone ())
 	);
 
 	if let ImplTraitBody::Some (translations) = associated_type_assignments
@@ -434,7 +426,7 @@ fn impl_trait_inner
 
 	let tokens = quote!
 	{
-		#[automatically_generated]
+		#[automatically_derived]
 		#unsafety impl #impl_generics #trait_path for #receiver_type
 		#where_clause
 		{
