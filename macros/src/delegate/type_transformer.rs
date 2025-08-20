@@ -7,6 +7,7 @@ use syn::{
 	AngleBracketedGenericArguments,
 	Type,
 	Path,
+	PathSegment,
 	Generics,
 	Token,
 	parse_quote
@@ -55,13 +56,13 @@ impl AssocBindings
 	fn match_self_as_trait_assoc_pattern
 	(
 		ty: &Type,
-		trait_ident: &Ident
+		trait_segment: &PathSegment
 	)
 	-> Result <Self>
 	{
 		let parser = |input: ParseStream <'_>|
 		{
-			expect_tokens (input, quote! (<Self as #trait_ident>::))?;
+			expect_tokens (input, quote! (<Self as #trait_segment>::))?;
 
 			Ok (input . parse ()?)
 		};
@@ -157,13 +158,11 @@ impl TypeTransformer
 
 		if let Some (last_segment) = self . trait_path . segments . last ()
 		{
-			let trait_ident = &last_segment . ident;
-
 			if let Ok (assoc_bindings) =
 				AssocBindings::match_self_as_trait_assoc_pattern
 			(
 				ty,
-				trait_ident
+				last_segment
 			)
 			{
 				return Some (assoc_bindings);
