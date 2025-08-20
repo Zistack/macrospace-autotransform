@@ -434,6 +434,7 @@ fn impl_trait_inner
 
 	let tokens = quote!
 	{
+		#[automatically_generated]
 		#unsafety impl #impl_generics #trait_path for #receiver_type
 		#where_clause
 		{
