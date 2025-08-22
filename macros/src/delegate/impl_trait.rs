@@ -33,7 +33,7 @@ use super::{kw, TypeTransformer, ImplTraitBody};
 fn impl_associated_const
 (
 	delegated_receiver_type: &Type,
-	trait_path: &Path,
+	delegated_trait_path: &Path,
 	type_transformer: &mut TypeTransformer,
 	trait_item: TraitItemConst,
 	to_delegate_transforms: &AutotransformBank,
@@ -61,7 +61,7 @@ fn impl_associated_const
 		. try_apply_forward
 		(
 			&ty . to_token_stream (),
-			&parse_quote! (<#delegated_receiver_type as #trait_path>::#ident)
+			&parse_quote! (<#delegated_receiver_type as #delegated_trait_path>::#ident)
 		)
 		. map_err (|e| Into::<Error>::into (e))?
 	{
@@ -73,7 +73,7 @@ fn impl_associated_const
 		None =>
 		(
 			ty . to_token_stream (),
-			quote! (<#delegated_receiver_type as #trait_path>::#ident)
+			quote! (<#delegated_receiver_type as #delegated_trait_path>::#ident)
 		)
 	};
 
@@ -93,7 +93,7 @@ fn impl_associated_const
 fn impl_associated_fn
 (
 	delegated_receiver_type: &Type,
-	trait_path: &Path,
+	delegated_trait_path: &Path,
 	type_transformer: &mut TypeTransformer,
 	trait_item: TraitItemFn,
 	to_delegate_transforms: &AutotransformBank,
@@ -166,7 +166,7 @@ fn impl_associated_fn
 
 	let call_expr = parse_quote!
 	(
-		<#delegated_receiver_type as #trait_path>::#ident (#arg_expressions)
+		<#delegated_receiver_type as #delegated_trait_path>::#ident (#arg_expressions)
 	);
 
 	let call_expr = match asyncness
@@ -210,7 +210,7 @@ fn impl_associated_fn
 fn impl_associated_type
 (
 	delegated_receiver_type: &Type,
-	trait_path: &Path,
+	delegated_trait_path: &Path,
 	type_transformer: &mut TypeTransformer,
 	trait_item: TraitItemType
 )
@@ -262,7 +262,7 @@ fn impl_associated_type
 			{
 				#(#attrs)*
 				type #ident #impl_generics =
-					<#delegated_receiver_type as #trait_path>::#ident
+					<#delegated_receiver_type as #delegated_trait_path>::#ident
 				#where_clause;
 			}
 		}
@@ -378,7 +378,7 @@ fn impl_trait_inner
 				impl_associated_const
 				(
 					&delegated_receiver_type,
-					&trait_path,
+					&delegated_trait_path,
 					&mut type_transformer,
 					trait_item,
 					&to_delegate_transforms
@@ -389,7 +389,7 @@ fn impl_trait_inner
 				impl_associated_fn
 				(
 					&delegated_receiver_type,
-					&trait_path,
+					&delegated_trait_path,
 					&mut type_transformer,
 					trait_item,
 					&to_delegate_transforms,
@@ -401,7 +401,7 @@ fn impl_trait_inner
 				impl_associated_type
 				(
 					&delegated_receiver_type,
-					&trait_path,
+					&delegated_trait_path,
 					&mut type_transformer,
 					trait_item
 				)?
