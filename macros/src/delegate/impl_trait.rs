@@ -50,8 +50,11 @@ fn impl_associated_const
 	}
 		= trait_item;
 
+	let mut scrubber = Substitutions::scrubber ("__from_def_", &generics . params);
+	let generics = scrubber . fold_generics (generics);
 	let generics = type_transformer . fold_generics (generics);
 
+	let ty = scrubber . fold_type (ty);
 	let ty = type_transformer . fold_type (ty);
 
 	let (transformed_ty, transformed_expr) = match to_delegate_transforms
@@ -117,6 +120,8 @@ fn impl_associated_fn
 	}
 		= trait_item;
 
+	let mut scrubber = Substitutions::scrubber ("__from_def_", &generics . params);
+	let generics = scrubber . fold_generics (generics);
 	let generics = type_transformer . fold_generics (generics);
 
 	let mut arg_expressions = Punctuated::<Expr, Token! [,]>::new ();
@@ -125,7 +130,10 @@ fn impl_associated_fn
 	{
 		// The clone here could arguably be replaced with some use of
 		// replace_with!.
-		*input = type_transformer . fold_fn_arg (input . clone ());
+		*input = type_transformer . fold_fn_arg
+		(
+			scrubber . fold_fn_arg (input . clone ())
+		);
 
 		match input
 		{
@@ -167,6 +175,7 @@ fn impl_associated_fn
 		None => call_expr
 	};
 
+	let output = scrubber . fold_return_type (output);
 	let output = type_transformer . fold_return_type (output);
 
 	let body_expr = match &output
@@ -216,6 +225,8 @@ fn impl_associated_type
 	}
 		= trait_item;
 
+	let mut scrubber = Substitutions::scrubber ("__from_def_", &generics . params);
+	let generics = scrubber . fold_generics (generics);
 	let generics = type_transformer . fold_generics (generics);
 
 	let tokens = match type_transformer . associated_types . get (&ident)
