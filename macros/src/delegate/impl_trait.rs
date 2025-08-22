@@ -1,4 +1,5 @@
 use macrospace::parse_args;
+use macrospace::path_utils::without_arguments;
 use macrospace::generics::get_path_arguments;
 use macrospace::substitute::Substitutions;
 use syn::{
@@ -14,6 +15,7 @@ use syn::{
 	ReturnType,
 	TraitItemType,
 	Generics,
+	GenericArgument,
 	ItemTrait,
 	TraitItem,
 	Token,
@@ -291,12 +293,36 @@ fn impl_trait_inner
 		None => receiver_type . clone ()
 	};
 
-	let delegated_trait_path = match to_delegate_transforms
-		. try_apply_type_forward (&trait_path . to_token_stream ())
-		. map_err (Into::<Error>::into)?
+	let mut trait_path_arguments =
+		Punctuated::<GenericArgument, Token! [,]>::new ();
+
+	for path_argument in get_path_arguments (&trait_path)?
 	{
-		Some (transformed_path) => parse2 (transformed_path)?,
-		None => trait_path . clone ()
+		let new_path_argument = match path_argument
+		{
+			GenericArgument::Type (ty) => match to_delegate_transforms
+				. try_apply_type_forward (&ty . to_token_stream ())
+				. map_err (Into::<Error>::into)?
+			{
+				Some (transformed_ty) =>
+					GenericArgument::Type (parse2 (transformed_ty)?),
+				None => GenericArgument::Type (ty)
+			},
+			a @ _ => a
+		};
+
+		trait_path_arguments . push (new_path_argument);
+	}
+
+	let stripped_trait_path = without_arguments (trait_path . clone ());
+
+	let delegated_trait_path = if trait_path_arguments . is_empty ()
+	{
+		stripped_trait_path
+	}
+	else
+	{
+		parse_quote! (#stripped_trait_path <#trait_path_arguments>)
 	};
 
 	let mut scrubber = Substitutions::scrubber
