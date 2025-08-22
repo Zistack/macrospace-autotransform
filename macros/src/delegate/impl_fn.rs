@@ -1,6 +1,5 @@
 use macrospace::parse_args;
-use macrospace::generics::get_path_arguments;
-use macrospace::path_utils::as_prefix;
+use macrospace::path_utils::{get_path_arguments, as_prefix};
 use macrospace::substitute::Substitutions;
 use syn::{
 	Generics,
@@ -59,7 +58,7 @@ fn impl_fn_inner
 	let mut substitutions = Substitutions::try_from_path_arguments
 	(
 		&orig_generics . params,
-		&fn_path_arguments
+		&fn_path_arguments . cloned () . unwrap_or_default ()
 	)?;
 
 	if let Some (where_clause) = orig_generics . where_clause
