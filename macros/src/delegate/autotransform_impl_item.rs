@@ -31,6 +31,7 @@ impl AutotransformImplItem
 #[derive (Clone, Debug, Parse, ToTokens)]
 pub struct AssocTypeTranslation
 {
+	pub type_token: Token! [type],
 	pub ident: Ident,
 	pub generics: Generics,
 	pub eq_token: Token! [=],
@@ -56,7 +57,7 @@ impl Parse for AssocTypeTranslations
 
 		while ! content . is_empty ()
 		{
-			translations . push (input . parse ()?);
+			translations . push (content . parse ()?);
 		}
 
 		Ok (Self {brace_token, translations})
