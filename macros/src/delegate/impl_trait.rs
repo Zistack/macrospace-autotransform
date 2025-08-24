@@ -1,5 +1,9 @@
 use macrospace::parse_args;
-use macrospace::path_utils::{get_path_arguments, get_path_arguments_mut};
+use macrospace::path_utils::{
+	get_path_arguments,
+	get_path_arguments_mut,
+	make_path_arguments
+};
 use macrospace::substitute::Substitutions;
 use syn::{
 	Type,
@@ -349,10 +353,9 @@ fn impl_trait_inner
 			);
 	}
 
-	generics
-		. make_where_clause ()
-		. predicates
-		. push (parse_quote! (#delegated_receiver_type: #delegated_trait_path));
+	let mut delegated_trait_bound = delegated_trait_path . clone ();
+	let delegated_trait_bound_arguments =
+		make_path_arguments (&mut delegated_trait_bound)?;
 
 	let mut type_transformer = TypeTransformer::new
 	(
@@ -364,16 +367,32 @@ fn impl_trait_inner
 	{
 		for translation in translations . translations
 		{
-			let ty = translation . ty;
-
+			if translation . generics . params . is_empty ()
+			{
+				if let Some (delegated_ty) = from_delegate_transforms
+					. try_apply_type_backward (&translation . ty . to_token_stream ())
+					. map_err (Into::<Error>::into)?
+				{
+					let assoc_ident = &translation . ident;
+					delegated_trait_bound_arguments . push
+					(
+						parse_quote! (#assoc_ident = #delegated_ty)
+					);
+				}
+			}
 			type_transformer . add_associated_type
 			(
 				translation . ident,
 				translation . generics,
-				ty
+				translation . ty
 			);
 		}
 	}
+
+	generics
+		. make_where_clause ()
+		. predicates
+		. push (parse_quote! (#delegated_receiver_type: #delegated_trait_bound));
 
 	let mut item_impls = Vec::new ();
 
