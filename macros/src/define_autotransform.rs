@@ -8,7 +8,7 @@ use macrospace_autotransform_core::Autotransform;
 fn try_define_autotransform_impl (input: proc_macro::TokenStream)
 -> Result <proc_macro2::TokenStream>
 {
-	let mut autotransform: Autotransform = parse (input)?;
+	let autotransform: Autotransform = parse (input)?;
 
 	autotransform . weak_validate ()?;
 

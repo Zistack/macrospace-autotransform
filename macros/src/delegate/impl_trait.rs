@@ -62,24 +62,19 @@ fn impl_associated_const
 	let ty = scrubber . fold_type (ty);
 	let ty = type_transformer . fold_type (ty);
 
+	let delegated_item_path =
+		quote! (<#delegated_receiver_type as #delegated_trait_path>::#ident);
+
 	let (transformed_ty, transformed_expr) = match to_delegate_transforms
-		. try_apply_forward
-		(
-			&ty . to_token_stream (),
-			&parse_quote! (<#delegated_receiver_type as #delegated_trait_path>::#ident)
-		)
+		. try_apply_forward (&ty . to_token_stream ())
 		. map_err (|e| Into::<Error>::into (e))?
 	{
-		Some ((transformed_ty, transformed_expr)) =>
+		Some ((transformed_ty, expr_binding)) =>
 		(
 			transformed_ty,
-			transformed_expr
+			expr_binding . to_substituted_arg (&delegated_item_path)
 		),
-		None =>
-		(
-			ty . to_token_stream (),
-			quote! (<#delegated_receiver_type as #delegated_trait_path>::#ident)
-		)
+		None => (ty . to_token_stream (), delegated_item_path)
 	};
 
 	let (impl_generics, _, where_clause) =
@@ -142,41 +137,37 @@ fn impl_associated_fn
 
 		match input
 		{
-			FnArg::Receiver (Receiver {self_token, ty, ..}) =>
-				match to_delegate_transforms . try_apply_forward
-			(
-				&ty . to_token_stream (),
-				&parse_quote! (#self_token)
-			)
+			FnArg::Receiver (Receiver {self_token, ty, ..}) => match to_delegate_transforms
+				. try_apply_forward (&ty . to_token_stream ())
 				. map_err (|e| Into::<Error>::into (e))?
 			{
-				Some ((_, transformed_expr)) =>
-					arg_expressions . push (parse2 (transformed_expr)?),
+				Some ((_, expr_binding)) => arg_expressions . push
+				(
+					parse2 (expr_binding . to_substituted_arg (self_token))?
+				),
 				None => arg_expressions . push (parse_quote! (#self_token))
 			},
-			FnArg::Typed (PatType {pat, ty, ..}) =>
-				match to_delegate_transforms . try_apply_forward
-			(
-				&ty . to_token_stream (),
-				&parse_quote! (#pat)
-			)
+			FnArg::Typed (PatType {pat, ty, ..}) => match to_delegate_transforms
+				. try_apply_forward (&ty . to_token_stream ())
 				. map_err (|e| Into::<Error>::into (e))?
 			{
-				Some ((_, transformed_expr)) =>
-					arg_expressions . push (parse2 (transformed_expr)?),
+				Some ((_, expr_binding)) => arg_expressions . push
+				(
+					parse2 (expr_binding . to_substituted_arg (pat))?
+				),
 				None => arg_expressions . push (parse_quote! (#pat))
 			}
 		}
 	}
 
-	let call_expr = parse_quote!
+	let call_expr = quote!
 	(
 		<#delegated_receiver_type as #delegated_trait_path>::#ident (#arg_expressions)
 	);
 
 	let call_expr = match asyncness
 	{
-		Some (_) => parse_quote! (#call_expr . await),
+		Some (_) => quote! (#call_expr . await),
 		None => call_expr
 	};
 
@@ -187,11 +178,11 @@ fn impl_associated_fn
 	{
 		ReturnType::Default => call_expr,
 		ReturnType::Type (_, ty) => match from_delegate_transforms
-			. try_apply_backward (&ty . to_token_stream (), &call_expr)
+			. try_apply_backward (&ty . to_token_stream ())
 			. map_err (|e| Into::<Error>::into (e))?
 		{
-			Some ((_, transformed_expr)) =>
-				parse2 (transformed_expr)?,
+			Some ((_, expr_binding)) =>
+				parse2 (expr_binding . to_substituted_arg (&call_expr))?,
 			None => call_expr
 		}
 	};

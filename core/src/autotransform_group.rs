@@ -1,13 +1,18 @@
 use std::iter::{Once, once};
 
-use macrospace::substitute::Argument;
+use macrospace::pattern::{ParameterBindingTypeMismatch, SpecializationError};
 use syn::{Visibility, Ident};
-use syn::parse::{ParseStream, Result};
+use syn::parse::ParseStream;
 use syn_derive::{Parse, ToTokens};
 use quote::TokenStreamExt;
 
-use crate::{Autotransform, kw};
-use crate::bindings::SpecializationBindings;
+use crate::{
+	TransformBindingType,
+	SpecializationBinding,
+	SpecializationBindings,
+	Autotransform,
+	kw
+};
 
 #[derive (Clone, Debug, Parse, ToTokens)]
 pub struct AutotransformGroup
@@ -26,15 +31,27 @@ pub struct AutotransformGroup
 
 impl AutotransformGroup
 {
-	pub fn specialize <I> (&mut self, assignments: I) -> syn::Result <()>
-	where I: IntoIterator <Item = (Ident, Argument)>
+	pub fn specialize
+	(
+		&mut self,
+		specialization_bindings: &SpecializationBindings
+	)
+	-> Result
+	<
+		(),
+		SpecializationError
+		<
+			ParameterBindingTypeMismatch
+			<
+				SpecializationBinding,
+				TransformBindingType
+			>
+		>
+	>
 	{
-		let specialization_bindings =
-			SpecializationBindings::from_iter (assignments);
-
 		for autotransform in &mut self . autotransforms
 		{
-			autotransform . specialize_with_bindings (&specialization_bindings)?;
+			autotransform . specialize (&specialization_bindings)?;
 		}
 
 		Ok (())
@@ -62,7 +79,7 @@ pub enum AutotransformInput
 
 impl AutotransformInput
 {
-	pub fn try_parse (input: ParseStream <'_>) -> Result <Option <Self>>
+	pub fn try_parse (input: ParseStream <'_>) -> syn::Result <Option <Self>>
 	{
 		let speculative = input . fork ();
 
@@ -93,7 +110,7 @@ impl AutotransformInput
 		Err (lookahead . error ())
 	}
 
-	pub fn parse_all (input: ParseStream <'_>) -> Result <Vec <Self>>
+	pub fn parse_all (input: ParseStream <'_>) -> syn::Result <Vec <Self>>
 	{
 		let mut autotransform_inputs = Vec::new ();
 
@@ -105,15 +122,30 @@ impl AutotransformInput
 		Ok (autotransform_inputs)
 	}
 
-	pub fn specialize <I> (&mut self, assignments: I) -> syn::Result <()>
-	where I: IntoIterator <Item = (Ident, Argument)>
+	pub fn specialize
+	(
+		&mut self,
+		specialization_bindings: &SpecializationBindings
+	)
+	-> Result
+	<
+		(),
+		SpecializationError
+		<
+			ParameterBindingTypeMismatch
+			<
+				SpecializationBinding,
+				TransformBindingType
+			>
+		>
+	>
 	{
 		match self
 		{
 			Self::Single (autotransform) =>
-				autotransform . specialize (assignments),
+				autotransform . specialize (specialization_bindings),
 			Self::Group (autotransform_group) =>
-				autotransform_group . specialize (assignments)
+				autotransform_group . specialize (specialization_bindings)
 		}
 	}
 

@@ -99,16 +99,15 @@ fn impl_fn_inner
 				match to_delegate_transform . try_apply_backward
 				(
 					&ty . to_token_stream (),
-					&parse_quote! (#pat)
 				) . map_err (|e| Into::<Error>::into (e))?
 				{
-					Some ((transformed_ty, transformed_expr)) =>
+					Some ((transformed_ty, expr_binding)) =>
 					{
 						new_inputs . push
 						(
 							parse_quote! (#(#attrs)* #pat : #transformed_ty)
 						);
-						arg_expressions . push (parse2 (transformed_expr)?);
+						arg_expressions . push (parse2 (expr_binding . to_substituted_arg (&*pat))?);
 					},
 					None =>
 					{
@@ -122,11 +121,11 @@ fn impl_fn_inner
 
 	let fn_expr = as_prefix (fn_path);
 
-	let call_expr = parse_quote! (#fn_expr (#arg_expressions));
+	let call_expr = quote! (#fn_expr (#arg_expressions));
 
 	let call_expr = match asyncness
 	{
-		Some (_) => parse_quote! (#call_expr . await),
+		Some (_) => quote! (#call_expr . await),
 		None => call_expr
 	};
 
@@ -139,10 +138,9 @@ fn impl_fn_inner
 			. try_apply_forward
 		(
 			&ty . to_token_stream (),
-			&call_expr
 		) . map_err (|e| Into::<Error>::into (e))?
 		{
-			Some ((transformed_ty, body_expr)) =>
+			Some ((transformed_ty, expr_binding)) =>
 			{
 				let transformed_output = ReturnType::Type
 				(
@@ -150,7 +148,7 @@ fn impl_fn_inner
 					Box::new (parse2 (transformed_ty)?)
 				);
 
-				(transformed_output, parse2 (body_expr)?)
+				(transformed_output, parse2 (expr_binding . to_substituted_arg (&call_expr))?)
 			},
 			None => (ReturnType::Type (arrow_token, ty), call_expr)
 		}

@@ -1,15 +1,16 @@
-use macrospace::substitute::Argument;
 use syn::{Ident, Path, PathSegment, PathArguments, Token};
 use syn::parse::{Parse, ParseStream, Result};
 use syn::punctuated::Punctuated;
 use syn_derive::{Parse, ToTokens};
+
+use macrospace_autotransform_core::SpecializationBinding;
 
 #[derive (Clone, Debug, Parse, ToTokens)]
 pub struct AutotransformParameterAssignment
 {
 	pub ident: Ident,
 	pub eq_token: Token! [=],
-	pub value: Argument
+	pub value: SpecializationBinding
 }
 
 #[derive (Clone, Debug, ToTokens)]

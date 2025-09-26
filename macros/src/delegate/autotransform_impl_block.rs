@@ -5,7 +5,8 @@ use quote::ToTokens;
 
 use macrospace_autotransform_core::{
 	AutotransformInputs,
-	AutotransformBank
+	AutotransformBank,
+	SpecializationBindings
 };
 
 use super::{AutotransformImplItem, kw};
@@ -194,13 +195,18 @@ impl UserAutotransformImplBlock
 			if let Some (parameters) = autotransform_path
 				. autotransform_parameters
 			{
-				autotransform_input . specialize
-				(
-					parameters
-						. assignments
-						. into_iter ()
-						. map (|assignment| (assignment . ident, assignment . value))
-				)?;
+				let mut specialization_bindings = SpecializationBindings::new ();
+
+				for assignment in parameters . assignments
+				{
+					specialization_bindings
+						. add_value_binding (assignment . ident, assignment . value)
+						. map_err (Into::<Error>::into)?;
+				}
+
+				autotransform_input
+					. specialize (&specialization_bindings)
+					. map_err (Into::<Error>::into)?;
 			}
 
 			to_delegate_transforms . extend
@@ -223,13 +229,18 @@ impl UserAutotransformImplBlock
 			if let Some (parameters) = autotransform_path
 				. autotransform_parameters
 			{
-				autotransform_input . specialize
-				(
-					parameters
-						. assignments
-						. into_iter ()
-						. map (|assignment| (assignment . ident, assignment . value))
-				)?;
+				let mut specialization_bindings = SpecializationBindings::new ();
+
+				for assignment in parameters . assignments
+				{
+					specialization_bindings
+						. add_value_binding (assignment . ident, assignment . value)
+						. map_err (Into::<Error>::into)?;
+				}
+
+				autotransform_input
+					. specialize (&specialization_bindings)
+					. map_err (Into::<Error>::into)?;
 			}
 
 			from_delegate_transforms . extend

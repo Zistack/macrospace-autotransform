@@ -2,29 +2,32 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 use macrospace::pattern::{
-	Pattern,
-	TypedParameter,
+	TokenizeBinding,
 	SubstitutionError,
-	ParameterBindingMismatch
+	ParameterBindingTypeMismatch,
+	VisitationError,
+	SpecializationError
 };
-use macrospace::substitute::Argument;
 use proc_macro2::TokenStream;
-use syn::{Visibility, Ident, Expr, Type, Token, parse2};
+use syn::{Visibility, Ident, Token, parse2};
 use syn::parse::ParseStream;
 use syn::token::{Brace, Bracket};
 use syn_derive::{Parse, ToTokens};
-use quote::ToTokens;
 
-use crate::kw;
-use crate::bindings::{
-	AutotransformBindings,
-	AutotransformBindingType,
-	AutotransformParameters,
-	ExprParameter,
+use crate::{
+	TypePatternBinding,
+	TypePatternBindings,
+	TransformBindingType,
+	TypePattern,
+	ExprBinding,
 	ExprBindings,
-	ExprParameters,
-	ValidationTokens,
-	SpecializationBindings
+	SubexprAnnotation,
+	ExprPattern,
+	SpecializationBinding,
+	SpecializationBindings,
+	transform_binding,
+	transform_binding_type,
+	kw
 };
 
 #[derive (Clone, Debug, Parse, ToTokens)]
@@ -37,19 +40,19 @@ pub struct Autotransform
 	#[syn (bracketed)]
 	pub from_brackets: Bracket,
 	#[syn (in = from_brackets)]
-	pub from_type: Pattern <TypedParameter <AutotransformBindingType>>,
+	pub from_type: TypePattern,
 
 	pub arrow_token: Token! [->],
 
 	#[syn (bracketed)]
 	pub to_brackets: Bracket,
 	#[syn (in = to_brackets)]
-	pub to_type: Pattern <TypedParameter <AutotransformBindingType>>,
+	pub to_type: TypePattern,
 
 	#[syn (braced)]
 	pub transform_braces: Brace,
 	#[syn (in = transform_braces)]
-	pub transform_expr: Pattern <ExprParameter>,
+	pub transform_expr: ExprPattern
 }
 
 impl Autotransform
@@ -82,150 +85,131 @@ impl Autotransform
 		Ok (autotransforms)
 	}
 
-	pub fn weak_validate (&mut self) -> syn::Result <()>
+
+	pub fn weak_validate (&self) -> syn::Result <()>
 	{
-		let to_params = self
-			. to_type
-			. validate_as_and_collect::<Type, AutotransformParameters, ValidationTokens> ()?;
-		let from_params = self
-			. from_type
-			. validate_as_and_collect::<Type, AutotransformParameters, ValidationTokens> ()?;
+		self . from_type . assert_parameters_superset (&self . to_type) . map_err
+		(
+			|ident|
+			syn::Error::new_spanned
+			(
+				&ident,
+				format!
+				(
+					"Parameter `{}` exists in to-pattern but not in from-pattern",
+					ident
+				)
+			)
+		)?;
 
-		let expr_params = self
-			. transform_expr
-			. validate_as_and_collect::<Expr, ExprParameters, ValidationTokens> ()?;
-
-		from_params . assert_superset (&to_params)?;
-
-		from_params . assert_expr_superset (&expr_params)?;
+		self . from_type . assert_parameters_superset (&self . transform_expr) . map_err
+		(
+			|ident|
+			syn::Error::new_spanned
+			(
+				&ident,
+				format!
+				(
+					"Parameter `{}` exists in expression-pattern but not in from-pattern",
+					ident
+				)
+			)
+		)?;
 
 		Ok (())
 	}
 
-	pub fn specialize <I> (&mut self, assignments: I) -> syn::Result <()>
-	where I: IntoIterator <Item = (Ident, Argument)>
-	{
-		let specialization_bindings =
-			SpecializationBindings::from_iter (assignments);
-
-		self . specialize_with_bindings (&specialization_bindings)
-	}
-
-	pub (in crate) fn specialize_with_bindings
+	pub fn specialize
 	(
 		&mut self,
 		specialization_bindings: &SpecializationBindings
 	)
-	-> syn::Result <()>
+	-> Result
+	<
+		(),
+		SpecializationError
+		<
+			ParameterBindingTypeMismatch
+			<
+				SpecializationBinding,
+				TransformBindingType
+			>
+		>
+	>
 	{
-		self . from_type = Pattern::from
-		(
-			self
-				. from_type
-				. substitute (specialization_bindings)
-				. map_err (Into::<syn::Error>::into)?
-		);
-		self . to_type = Pattern::from
-		(
-			self
-				. to_type
-				. substitute (specialization_bindings)
-				. map_err (Into::<syn::Error>::into)?
-		);
-		self . transform_expr = Pattern::from
-		(
-			self
-				. transform_expr
-				. substitute (specialization_bindings)
-				. map_err (Into::<syn::Error>::into)?
-		);
-
-		Ok (())
-	}
-
-	pub fn strong_validate (&mut self) -> syn::Result <()>
-	{
-		let to_params = self
-			. to_type
-			. validate_as_and_collect::<Type, AutotransformParameters, ValidationTokens> ()?;
-		let from_params = self
+		self . from_type = self
 			. from_type
-			. validate_as_and_collect::<Type, AutotransformParameters, ValidationTokens> ()?;
-
-		let expr_params = self
+			. specialize (specialization_bindings)?;
+		self . to_type = self
+			. to_type
+			. specialize (specialization_bindings)?;
+		self . transform_expr = self
 			. transform_expr
-			. validate_as_and_collect::<Expr, ExprParameters, ValidationTokens> ()?;
-
-		from_params . assert_superset (&to_params)?;
-		to_params . assert_superset (&from_params)?;
-
-		from_params . assert_expr_superset (&expr_params)?;
+			. specialize (specialization_bindings)?;
 
 		Ok (())
 	}
 
-	pub fn try_apply <D, F>
-	(
-		&self,
-		ty_tokens: TokenStream,
-		arg_expr: Expr,
-		mut apply_inner: F
-	)
-	-> Result <Option <(TokenStream, TokenStream)>, ApplicationError>
+	pub fn strong_validate (&self) -> syn::Result <()>
+	{
+		self . weak_validate ()?;
+
+		self . to_type . assert_parameters_superset (&self . from_type) . map_err
+		(
+			|ident|
+			syn::Error::new_spanned
+			(
+				&ident,
+				format!
+				(
+					"Parameter `{}` exists in from-pattern but not in to-pattern",
+					ident
+				)
+			)
+		)?;
+
+		Ok (())
+	}
+
+	pub fn try_apply <D, F> (&self, ty_tokens: TokenStream, mut apply_inner: F)
+	-> Result <Option <(TokenStream, ExprBinding)>, ApplicationError>
 	where
 		D: TransformDirection,
-		F: FnMut (TokenStream, Option <&Expr>)
-			-> Result <Option <(TokenStream, Option <TokenStream>)>, ApplicationError>
+		F: FnMut (TokenStream)
+			-> Result <Option <(TokenStream, ExprBinding)>, ApplicationError>
 	{
-		let mut autotransform_bindings: AutotransformBindings =
+		let mut autotransform_bindings: TypePatternBindings =
 			match D::from_type (self) . match_tokens (ty_tokens)
 		{
 			Ok (bindings) => bindings,
 			Err (_) => return Ok (None)
 		};
 
-		let expr_parameters: ExprParameters = self
-			. transform_expr
-			. collect_parameters ()?;
+		let mut expr_bindings = ExprBindings::new ();
 
-		let mut expr_bindings = ExprBindings::new (arg_expr);
-
-		for (transformable_ident, transformable_ty)
-		in autotransform_bindings . inner_types_mut ()
+		for (parameter_ident, autotransform_binding)
+		in &mut autotransform_bindings
 		{
-			match apply_inner
+			let expr_binding = transform_binding::<&mut F, F>
 			(
-				transformable_ty . to_token_stream (),
-				expr_parameters . get_arg_expr (transformable_ident)
-			)?
-			{
-				Some ((transformed_ty, maybe_transformed_expr)) =>
-				{
-					*transformable_ty = parse2 (transformed_ty)?;
+				autotransform_binding,
+				&mut apply_inner
+			)?;
 
-					if let Some (transformed_expr) = maybe_transformed_expr
-					{
-						expr_bindings . add_subvalue
-						(
-							transformable_ident . clone (),
-							parse2 (transformed_expr)?
-						);
-					}
-				},
-				None => continue
-			}
+			// This will never fail on account of the fact that we will never
+			// see the same identifier twice.
+			expr_bindings
+				. add_binding (parameter_ident . clone (), expr_binding)
+				. unwrap ();
 		}
 
 		let transformed_ty =
 			D::to_type (self) . substitute (&autotransform_bindings)?;
 
-		let transformed_expr = self
-			. transform_expr
-			. substitute (&expr_bindings)
-			// This process is infallible.
-			. unwrap ();
+		let transformed_expr_pattern =
+			parse2 (self . transform_expr . substitute (&expr_bindings)?)?;
 
-		Ok (Some ((transformed_ty, transformed_expr)))
+		Ok (Some ((transformed_ty, transformed_expr_pattern)))
 	}
 
 	// This cannot fail in as many ways as the first version, and the return
@@ -242,22 +226,21 @@ impl Autotransform
 		F: FnMut (TokenStream)
 			-> Result <Option <TokenStream>, ApplicationError>
 	{
-		let mut autotransform_bindings: AutotransformBindings =
+		let mut autotransform_bindings: TypePatternBindings =
 			match D::from_type (self) . match_tokens (ty_tokens)
 		{
 			Ok (bindings) => bindings,
 			Err (_) => return Ok (None)
 		};
 
-		for (_transformable_ident, transformable_ty)
-		in autotransform_bindings . inner_types_mut ()
+		for (_parameter_ident, autotransform_binding)
+		in &mut autotransform_bindings
 		{
-			match apply_inner (transformable_ty . to_token_stream ())?
-			{
-				Some (transformed_ty) =>
-					*transformable_ty = parse2 (transformed_ty)?,
-				None => continue
-			}
+			transform_binding_type::<&mut F, F>
+			(
+				autotransform_binding,
+				&mut apply_inner
+			)?;
 		}
 
 		let transformed_ty =
@@ -269,25 +252,21 @@ impl Autotransform
 
 pub trait TransformDirection
 {
-	fn from_type (autotransform: &Autotransform)
-	-> &Pattern <TypedParameter <AutotransformBindingType>>;
+	fn from_type (autotransform: &Autotransform) -> &TypePattern;
 
-	fn to_type (autotransform: &Autotransform)
-	-> &Pattern <TypedParameter <AutotransformBindingType>>;
+	fn to_type (autotransform: &Autotransform) -> &TypePattern;
 }
 
 pub struct Forward;
 
 impl TransformDirection for Forward
 {
-	fn from_type (autotransform: &Autotransform)
-	-> &Pattern <TypedParameter <AutotransformBindingType>>
+	fn from_type (autotransform: &Autotransform) -> &TypePattern
 	{
 		&autotransform . from_type
 	}
 
-	fn to_type (autotransform: &Autotransform)
-	-> &Pattern <TypedParameter <AutotransformBindingType>>
+	fn to_type (autotransform: &Autotransform) -> &TypePattern
 	{
 		&autotransform . to_type
 	}
@@ -297,48 +276,58 @@ pub struct Backward;
 
 impl TransformDirection for Backward
 {
-	fn from_type (autotransform: &Autotransform)
-	-> &Pattern <TypedParameter <AutotransformBindingType>>
+	fn from_type (autotransform: &Autotransform) -> &TypePattern
 	{
 		&autotransform . to_type
 	}
 
-	fn to_type (autotransform: &Autotransform)
-	-> &Pattern <TypedParameter <AutotransformBindingType>>
+	fn to_type (autotransform: &Autotransform) -> &TypePattern
 	{
 		&autotransform . from_type
 	}
 }
 
+pub type AutotransformTokenizeError =
+	<TransformBindingType as TokenizeBinding <TypePatternBinding>>::Error;
+
+pub type SubstituteTypeError =
+	VisitationError <SubstitutionError <AutotransformTokenizeError>>;
+
+pub type ExprTokenizeError =
+	<SubexprAnnotation as TokenizeBinding <ExprBinding>>::Error;
+
+pub type SubstituteExprError =
+	VisitationError <SubstitutionError <ExprTokenizeError>>;
+
 #[derive (Clone, Debug)]
 pub enum ApplicationError
 {
 	Transform (syn::parse::Error),
-	Collect (ParameterBindingMismatch <TokenStream>),
-	Substitute (SubstitutionError <AutotransformBindingType>)
+	SubstituteType (SubstituteTypeError),
+	SubstituteExpr (SubstituteExprError)
 }
 
 impl From <syn::parse::Error> for ApplicationError
 {
-	fn from (m: syn::parse::Error) -> Self
+	fn from (e: syn::parse::Error) -> Self
 	{
-		Self::Transform (m)
+		Self::Transform (e)
 	}
 }
 
-impl From <ParameterBindingMismatch <TokenStream>> for ApplicationError
+impl From <SubstituteTypeError> for ApplicationError
 {
-	fn from (c: ParameterBindingMismatch <TokenStream>) -> Self
+	fn from (e: SubstituteTypeError) -> Self
 	{
-		Self::Collect (c)
+		Self::SubstituteType (e)
 	}
 }
 
-impl From <SubstitutionError <AutotransformBindingType>> for ApplicationError
+impl From <SubstituteExprError> for ApplicationError
 {
-	fn from (s: SubstitutionError <AutotransformBindingType>) -> Self
+	fn from (e: SubstituteExprError) -> Self
 	{
-		Self::Substitute (s)
+		Self::SubstituteExpr (e)
 	}
 }
 
@@ -348,9 +337,9 @@ impl Display for ApplicationError
 	{
 		match self
 		{
-			Self::Transform (m) => Display::fmt (m, f),
-			Self::Collect (c) => Display::fmt (c, f),
-			Self::Substitute (s) => Display::fmt (s, f)
+			Self::Transform (e) => Display::fmt (e, f),
+			Self::SubstituteType (e) => Display::fmt (e, f),
+			Self::SubstituteExpr (e) => Display::fmt (e, f)
 		}
 	}
 }
@@ -365,9 +354,9 @@ impl Into <syn::parse::Error> for ApplicationError
 	{
 		match self
 		{
-			Self::Transform (m) => m,
-			Self::Collect (c) => c . into (),
-			Self::Substitute (s) => s . into ()
+			Self::Transform (e) => e,
+			Self::SubstituteType (e) => e . into (),
+			Self::SubstituteExpr (e) => e . into ()
 		}
 	}
 }
