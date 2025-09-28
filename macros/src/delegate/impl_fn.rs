@@ -1,6 +1,7 @@
 use macrospace::parse_args;
 use macrospace::path_utils::{get_path_arguments, as_prefix};
 use macrospace::substitute::Substitutions;
+use macrospace::stream_utils::strip_spans;
 use syn::{
 	Generics,
 	Path,
@@ -107,7 +108,10 @@ fn impl_fn_inner
 						(
 							parse_quote! (#(#attrs)* #pat : #transformed_ty)
 						);
-						arg_expressions . push (parse2 (expr_binding . to_substituted_arg (&*pat))?);
+						arg_expressions . push
+						(
+							parse2 (expr_binding . to_substituted_arg (&*pat))?
+						);
 					},
 					None =>
 					{
@@ -148,7 +152,10 @@ fn impl_fn_inner
 					Box::new (parse2 (transformed_ty)?)
 				);
 
-				(transformed_output, parse2 (expr_binding . to_substituted_arg (&call_expr))?)
+				(
+					transformed_output,
+					parse2 (expr_binding . to_substituted_arg (&call_expr))?
+				)
 			},
 			None => (ReturnType::Type (arrow_token, ty), call_expr)
 		}
@@ -168,7 +175,7 @@ fn impl_fn_inner
 		}
 	};
 
-	Ok (tokens)
+	Ok (strip_spans (tokens))
 }
 
 #[derive (Clone, Debug)]

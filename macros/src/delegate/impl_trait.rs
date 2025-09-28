@@ -5,6 +5,7 @@ use macrospace::path_utils::{
 	make_path_arguments
 };
 use macrospace::substitute::Substitutions;
+use macrospace::stream_utils::strip_spans;
 use syn::{
 	Type,
 	Path,
@@ -465,7 +466,7 @@ fn impl_trait_inner
 		}
 	};
 
-	Ok (tokens)
+	Ok (strip_spans (tokens))
 }
 
 #[derive (Clone, Debug)]
