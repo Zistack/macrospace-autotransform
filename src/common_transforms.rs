@@ -68,3 +68,26 @@ define_autotransform!
 		($[i]({let __tuple_x_i__ = __tuple_x__ . $#i; $T (__tuple_x_i__)}),*)
 	}}
 }
+
+define_autotransform!
+{
+	pub autotransform UnqualifiedVec
+	[Vec <$T: inner_type>] -> [Vec <$T: inner_type>]
+	{
+		Vec::from_iter (arg . into_iter () . map (|x| $T (x)))
+	}
+}
+
+define_autotransform!
+{
+	pub autotransform QualifiedVec
+	[std::vec::Vec <$T: inner_type>] -> [std::vec::Vec <$T: inner_type>]
+	{
+		std::vec::Vec::from_iter (arg . into_iter () . map (|x| $T (x)))
+	}
+}
+
+group_autotransforms!
+{
+	pub autotransform Vec [UnqualifiedVec, QualifiedVec]
+}
