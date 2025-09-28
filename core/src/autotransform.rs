@@ -88,20 +88,6 @@ impl Autotransform
 
 	pub fn weak_validate (&self) -> syn::Result <()>
 	{
-		self . from_type . assert_parameters_superset (&self . to_type) . map_err
-		(
-			|ident|
-			syn::Error::new_spanned
-			(
-				&ident,
-				format!
-				(
-					"Parameter `{}` exists in to-pattern but not in from-pattern",
-					ident
-				)
-			)
-		)?;
-
 		self . from_type . assert_parameters_superset (&self . transform_expr) . map_err
 		(
 			|ident|
@@ -153,6 +139,20 @@ impl Autotransform
 	pub fn strong_validate (&self) -> syn::Result <()>
 	{
 		self . weak_validate ()?;
+
+		self . from_type . assert_parameters_superset (&self . to_type) . map_err
+		(
+			|ident|
+			syn::Error::new_spanned
+			(
+				&ident,
+				format!
+				(
+					"Parameter `{}` exists in to-pattern but not in from-pattern",
+					ident
+				)
+			)
+		)?;
 
 		self . to_type . assert_parameters_superset (&self . from_type) . map_err
 		(
